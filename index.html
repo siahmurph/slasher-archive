@@ -53,9 +53,9 @@
                 <div class="filter-group">
                     <label class="filter-label">RELEASE TIMELINE</label>
                     <div class="range-inputs">
-                        <input type="number" id="yearMin" class="horror-input number-input" placeholder="1970" min="1874" max="2100">
+                        <input type="date" id="yearMin" class="horror-input date-input">
                         <span class="range-separator">TO</span>
-                        <input type="number" id="yearMax" class="horror-input number-input" placeholder="1989" min="1874" max="2100">
+                        <input type="date" id="yearMax" class="horror-input date-input">
                     </div>
                     <div class="upcoming-wrap" style="margin-top: 10px;">
                         <label class="genre-checkbox-label" for="upcomingReleases">
@@ -63,6 +63,12 @@
                             🔮 PREDICT UPCOMING (90 DAYS)
                         </label>
                     </div>
+                </div>
+
+                <!-- Minimum Runtime -->
+                <div class="filter-group">
+                    <label for="runtimeMin" class="filter-label">MINIMUM RUNTIME (MINS)</label>
+                    <input type="number" id="runtimeMin" class="horror-input number-input" value="70" min="0" max="300" step="5">
                 </div>
 
                 <!-- Inclusionary Genres -->
@@ -101,11 +107,7 @@
                     <div class="selected-chips" id="directorChips"></div>
                 </div>
 
-                <!-- Exclusionary Cast/Crew Text -->
-                <div class="filter-group">
-                    <label for="excludeDirector" class="filter-label">EXCLUDE DIRECTORS</label>
-                    <input type="text" id="excludeDirector" class="horror-input" placeholder="Banished director (comma-separated)...">
-                </div>
+
 
                 <!-- Original Language -->
                 <div class="filter-group">
@@ -162,28 +164,6 @@
             </section>
         </main>
 
-        <!-- FLOATING BASKET: The Body Count (Selected List) -->
-        <footer class="kill-list-basket" id="killListBasket" style="display: none;">
-            <div class="basket-summary">
-                <span class="basket-icon">🔪</span>
-                <div class="basket-stats">
-                    <span class="basket-title">THE KILL LIST</span>
-                    <span class="basket-count" id="selectedCount">0 MOVIES SELECTED</span>
-                </div>
-            </div>
-            
-            <div class="basket-actions">
-                <button class="blood-btn action-btn" id="btnExportCSV" title="Export as CSV file ready for Trakt/MDBList upload">
-                    <span class="btn-text">💾 EXPORT CSV</span>
-                </button>
-                <button class="blood-btn action-btn" id="btnExportTXT" title="Export plain text list of TMDb IDs">
-                    <span class="btn-text">📜 EXPORT TXT</span>
-                </button>
-                <button class="blood-btn clear-btn" id="btnClearSelections" title="Clear all selections">
-                    <span class="btn-text">❌ CLEAR</span>
-                </button>
-            </div>
-        </footer>
     </div>
 
     <!-- MOVIE DETAIL POPUP MODAL (Gothic blood overlay card) -->

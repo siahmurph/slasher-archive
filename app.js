@@ -5,7 +5,7 @@
 // --- STATE MANAGEMENT ---
 const state = {
     apiKey: localStorage.getItem('slasher_tmdb_key') || '',
-    selectedMovies: JSON.parse(localStorage.getItem('slasher_selected_movies')) || {},
+
     genres: {},
     activeFilters: {
         title: '',
@@ -15,7 +15,8 @@ const state = {
         excludeGenres: [],
         actors: [], // array of { id, name }
         directors: [], // array of { id, name }
-        excludeDirectors: '',
+        runtimeMin: '70',
+
         language: 'en',
         upcomingReleases: false,
         sortBy: 'primary_release_date.desc'
@@ -56,7 +57,8 @@ const elements = {
     directorSearch: document.getElementById('directorSearch'),
     directorSuggestions: document.getElementById('directorSuggestions'),
     directorChips: document.getElementById('directorChips'),
-    excludeDirector: document.getElementById('excludeDirector'),
+
+    runtimeMin: document.getElementById('runtimeMin'),
     languageSelect: document.getElementById('languageSelect'),
     btnSearch: document.getElementById('btnSearch'),
 
@@ -73,12 +75,7 @@ const elements = {
     btnNextPage: document.getElementById('btnNextPage'),
     pageIndicator: document.getElementById('pageIndicator'),
 
-    // Basket Overlay
-    killListBasket: document.getElementById('killListBasket'),
-    selectedCount: document.getElementById('selectedCount'),
-    btnExportCSV: document.getElementById('btnExportCSV'),
-    btnExportTXT: document.getElementById('btnExportTXT'),
-    btnClearSelections: document.getElementById('btnClearSelections'),
+
 
     // Config Modal
     configModal: document.getElementById('configModal'),
@@ -110,7 +107,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     initModals();
     initFilters();
     initSuggestions();
-    initBasket();
+
     initRadarrHandshake();
 
     // Retrieve server-side dynamic config
@@ -563,11 +560,19 @@ function initFilters() {
         }
     });
 
-    // Event bindings for mapping inputs to activeFilters state
     elements.searchTitle.addEventListener('input', (e) => state.activeFilters.title = e.target.value);
-    elements.yearMin.addEventListener('input', (e) => state.activeFilters.yearMin = e.target.value);
-    elements.yearMax.addEventListener('input', (e) => state.activeFilters.yearMax = e.target.value);
-    elements.excludeDirector.addEventListener('input', (e) => state.activeFilters.excludeDirectors = e.target.value);
+    elements.searchTitle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            state.currentPage = 1;
+            triggerSearch();
+            playSlashSound();
+        }
+    });
+    elements.yearMin.addEventListener('change', (e) => state.activeFilters.yearMin = e.target.value);
+    elements.yearMax.addEventListener('change', (e) => state.activeFilters.yearMax = e.target.value);
+
+    elements.runtimeMin.addEventListener('input', (e) => state.activeFilters.runtimeMin = e.target.value);
     elements.languageSelect.addEventListener('change', (e) => state.activeFilters.language = e.target.value);
     
     // Sort Select mapping
@@ -738,16 +743,21 @@ async function triggerSearch() {
                 url.searchParams.append('primary_release_date.lte', dateMax);
             } else {
                 if (state.activeFilters.yearMin) {
-                    url.searchParams.append('primary_release_date.gte', `${state.activeFilters.yearMin}-01-01`);
+                    url.searchParams.append('primary_release_date.gte', state.activeFilters.yearMin);
                 }
                 if (state.activeFilters.yearMax) {
-                    url.searchParams.append('primary_release_date.lte', `${state.activeFilters.yearMax}-12-31`);
+                    url.searchParams.append('primary_release_date.lte', state.activeFilters.yearMax);
                 }
             }
 
             // Language
             if (state.activeFilters.language) {
                 url.searchParams.append('with_original_language', state.activeFilters.language);
+            }
+
+            // Minimum Runtime
+            if (state.activeFilters.runtimeMin) {
+                url.searchParams.append('with_runtime.gte', state.activeFilters.runtimeMin);
             }
 
             // Cast/Crew filters
@@ -785,19 +795,19 @@ async function triggerSearch() {
 
         // 1. If it was a Text Search, apply filters client-side
         if (isTextSearch) {
-            // A. Release Year Range
+            // A. Release Date Range
             if (state.activeFilters.yearMin) {
-                const yMin = parseInt(state.activeFilters.yearMin);
+                const dMin = new Date(state.activeFilters.yearMin);
                 filteredMovies = filteredMovies.filter(movie => {
-                    const y = movie.release_date ? parseInt(movie.release_date.split('-')[0]) : 0;
-                    return y >= yMin;
+                    if (!movie.release_date) return false;
+                    return new Date(movie.release_date) >= dMin;
                 });
             }
             if (state.activeFilters.yearMax) {
-                const yMax = parseInt(state.activeFilters.yearMax);
+                const dMax = new Date(state.activeFilters.yearMax);
                 filteredMovies = filteredMovies.filter(movie => {
-                    const y = movie.release_date ? parseInt(movie.release_date.split('-')[0]) : 0;
-                    return y <= yMax;
+                    if (!movie.release_date) return false;
+                    return new Date(movie.release_date) <= dMax;
                 });
             }
 
@@ -823,34 +833,7 @@ async function triggerSearch() {
             }
         }
 
-        // 2. Exclusionary Directors Filter
-        if (state.activeFilters.excludeDirectors.trim()) {
-            const excluded = state.activeFilters.excludeDirectors.split(',').map(s => s.trim().toLowerCase());
-            showStatus('<div class="loading-small">SENSING CABAL ROSTERS... EXCLUDING DIRECTORS...</div>', false);
-            
-            const detailedFilterResults = [];
-            for (const movie of filteredMovies) {
-                try {
-                    const creditsResp = await fetch(`https://api.themoviedb.org/3/movie/${movie.id}/credits?api_key=${state.apiKey}`);
-                    const credits = await creditsResp.json();
-                    
-                    const directors = credits.crew
-                        .filter(member => member.job === 'Director')
-                        .map(d => d.name.toLowerCase());
-                    
-                    const hasExcluded = directors.some(dName => 
-                        excluded.some(exName => dName.includes(exName))
-                    );
-                    
-                    if (!hasExcluded) {
-                        detailedFilterResults.push(movie);
-                    }
-                } catch (err) {
-                    detailedFilterResults.push(movie);
-                }
-            }
-            filteredMovies = detailedFilterResults;
-        }
+
 
         if (filteredMovies.length === 0) {
             showStatus('Page filters eliminated all results. Check your exclusionary lists.', false);
@@ -877,11 +860,10 @@ function renderMovieShelf(movies) {
     elements.movieShelf.innerHTML = '';
     
     movies.forEach(movie => {
-        const isSelected = !!state.selectedMovies[movie.id];
         const inLibrary = state.radarr.connected && state.radarrLibrary.has(movie.id);
         
         const card = document.createElement('div');
-        card.className = `vhs-movie-card ${isSelected ? 'selected' : ''} ${inLibrary ? 'in-library' : ''}`;
+        card.className = `vhs-movie-card ${inLibrary ? 'in-library' : ''}`;
         card.setAttribute('data-id', movie.id);
         
         let posterHTML = '';
@@ -897,11 +879,11 @@ function renderMovieShelf(movies) {
         }
 
         const scoreVal = parseFloat(movie.vote_average);
-        const score = (!isNaN(scoreVal) && scoreVal > 0) ? scoreVal.toFixed(1) : '?.?';
+        const voteCount = movie.vote_count || 0;
+        const score = (!isNaN(scoreVal) && voteCount > 0) ? scoreVal.toFixed(1) : 'N/R';
         const year = movie.release_date ? movie.release_date.split('-')[0] : 'N/A';
 
         card.innerHTML = `
-            ${isSelected ? '<div class="card-checked-badge">✓</div>' : ''}
             ${inLibrary ? '<div class="card-library-badge">🟢 IN LIBRARY</div>' : ''}
             <div class="card-poster-wrap">
                 ${posterHTML}
@@ -953,16 +935,13 @@ async function loadMovieDetailPopup(movieSummary) {
         const runtime = detail.runtime ? `${detail.runtime} mins` : 'N/A';
         const genresList = detail.genres?.map(g => g.name.toUpperCase()).join(' | ') || 'UNKNOWN';
         const ratingVal = parseFloat(detail.vote_average);
-        const ratingText = (!isNaN(ratingVal) && ratingVal > 0) ? `${ratingVal.toFixed(1)} / 10` : '?.? / 10';
+        const detailVoteCount = detail.vote_count || 0;
+        const ratingText = (!isNaN(ratingVal) && detailVoteCount > 0) ? `${ratingVal.toFixed(1)} / 10` : 'Not Rated';
 
-        // Check selection basket state
-        const isSelected = !!state.selectedMovies[movieId];
-
-        // Background Check if already present in Radarr library
+        // Check if already present in Radarr library
         let radarrHookHTML = '';
         if (state.radarr.connected) {
             radarrHookHTML = `<div id="detailRadarrAction" class="loading-small">Sensing Radarr status...</div>`;
-            checkRadarrStatus(movieId);
         } else {
             radarrHookHTML = `
                 <div class="radarr-status-badge" style="background-color: #1a1616; border-color: #4a3434; color: var(--text-muted); font-size: 0.72rem;">
@@ -1020,29 +999,20 @@ async function loadMovieDetailPopup(movieSummary) {
                         <div class="credit-row">Main Cast: <strong>${cast}</strong></div>
                     </div>
 
-                    <!-- Direct Radarr and Basket Selections Trigger Panel -->
+                    <!-- Direct Radarr Action Panel -->
                     <div class="detail-actions-box">
                         <div class="radarr-action-buttons">
                             ${radarrHookHTML}
                         </div>
-                        <button class="blood-btn btn-selection-toggle" id="btnDetailSelectToggle">
-                            <span class="btn-text">${isSelected ? '❌ BANISH FROM THE KILL LIST' : '🩸 ADD TO THE KILL LIST'}</span>
-                        </button>
                     </div>
                 </div>
             </div>
         `;
 
-        // Selection Toggle linkage inside detailed popup modal
-        document.getElementById('btnDetailSelectToggle').addEventListener('click', () => {
-            const cardEl = document.querySelector(`.vhs-movie-card[data-id="${movieId}"]`);
-            toggleMovieSelection(detail, cardEl);
-
-            // Re-render button state text
-            const selectBtn = document.getElementById('btnDetailSelectToggle');
-            const nowSelected = !!state.selectedMovies[movieId];
-            selectBtn.innerHTML = `<span class="btn-text">${nowSelected ? '❌ BANISH FROM THE KILL LIST' : '🩸 ADD TO THE KILL LIST'}</span>`;
-        });
+        // Now that the DOM is rendered, check Radarr library status
+        if (state.radarr.connected) {
+            checkRadarrStatus(movieId);
+        }
 
     } catch (err) {
         console.error('Details load failed:', err);
@@ -1149,225 +1119,7 @@ async function addMovieToRadarr(tmdbId) {
     }
 }
 
-// --- MOVIE BASKET SELECTION ENGINE ---
-async function toggleMovieSelection(movie, cardElement) {
-    const movieId = movie.id;
-    
-    if (state.selectedMovies[movieId]) {
-        delete state.selectedMovies[movieId];
-        if (cardElement) {
-            cardElement.classList.remove('selected');
-            const badge = cardElement.querySelector('.card-checked-badge');
-            if (badge) badge.remove();
-        }
-        
-        playSlashSound();
-        updateBasketUI();
-    } else {
-        if (cardElement) {
-            cardElement.classList.add('selected');
-            // Prevent duplicates badge addition
-            if (!cardElement.querySelector('.card-checked-badge')) {
-                const badge = document.createElement('div');
-                badge.className = 'card-checked-badge';
-                badge.textContent = '✓';
-                cardElement.appendChild(badge);
-            }
-        }
-        
-        playSlashSound();
-        
-        const releaseYear = movie.release_date ? movie.release_date.split('-')[0] : 'N/A';
-        state.selectedMovies[movieId] = {
-            id: movieId,
-            title: movie.title,
-            year: releaseYear,
-            tmdb_id: movieId,
-            imdb_id: movie.imdb_id || 'FETCHING...'
-        };
-        
-        updateBasketUI();
 
-        if (!movie.imdb_id || movie.imdb_id === 'FETCHING...') {
-            try {
-                const detailResp = await fetch(`https://api.themoviedb.org/3/movie/${movieId}?api_key=${state.apiKey}`);
-                const detail = await detailResp.json();
-                
-                if (state.selectedMovies[movieId]) {
-                    state.selectedMovies[movieId].imdb_id = detail.imdb_id || '';
-                    localStorage.setItem('slasher_selected_movies', JSON.stringify(state.selectedMovies));
-                }
-            } catch (err) {
-                console.warn(`Failed fetching IMDb ID for ${movie.title}`, err);
-                if (state.selectedMovies[movieId]) {
-                    state.selectedMovies[movieId].imdb_id = '';
-                }
-            }
-        }
-    }
-    
-    localStorage.setItem('slasher_selected_movies', JSON.stringify(state.selectedMovies));
-}
-
-function updateBasketUI() {
-    const keys = Object.keys(state.selectedMovies);
-    const count = keys.length;
-
-    if (count > 0) {
-        elements.killListBasket.style.display = 'flex';
-        elements.selectedCount.textContent = `${count} MOVIE${count > 1 ? 'S' : ''} SELECTED`;
-    } else {
-        elements.killListBasket.style.display = 'none';
-    }
-}
-
-function initBasket() {
-    updateBasketUI();
-
-    elements.btnClearSelections.addEventListener('click', () => {
-        state.selectedMovies = {};
-        localStorage.setItem('slasher_selected_movies', JSON.stringify(state.selectedMovies));
-        
-        const cards = elements.movieShelf.querySelectorAll('.vhs-movie-card');
-        cards.forEach(card => {
-            card.classList.remove('selected');
-            const badge = card.querySelector('.card-checked-badge');
-            if (badge) badge.remove();
-        });
-        
-        updateBasketUI();
-        playSlashSound();
-    });
-
-    elements.btnExportCSV.addEventListener('click', exportSelectionsCSV);
-    elements.btnExportTXT.addEventListener('click', exportSelectionsTXT);
-    
-    // Inject Bulk Add to Radarr button if connected!
-    if (state.radarr.connected) {
-        addBulkRadarrButton();
-    }
-}
-
-function addBulkRadarrButton() {
-    // Check if the bulk button already exists
-    if (document.getElementById('btnBulkImportRadarr')) return;
-
-    const bulkBtn = document.createElement('button');
-    bulkBtn.className = 'blood-btn action-btn';
-    bulkBtn.id = 'btnBulkImportRadarr';
-    bulkBtn.title = 'Add all selected movies directly to Radarr at once!';
-    bulkBtn.innerHTML = '<span class="btn-text">🚀 BULK RADARR IMPORT</span>';
-
-    // Place it before the clear button
-    elements.killListBasket.querySelector('.basket-actions').insertBefore(bulkBtn, elements.btnClearSelections);
-
-    bulkBtn.addEventListener('click', triggerBulkRadarrImport);
-}
-
-// Bulk Importer pushing multiple selected titles to Radarr
-async function triggerBulkRadarrImport() {
-    const selectedList = Object.values(state.selectedMovies);
-    const total = selectedList.length;
-    if (total === 0) return;
-
-    playSlashSound('swipe');
-    const bulkBtn = document.getElementById('btnBulkImportRadarr');
-    bulkBtn.disabled = true;
-
-    let successfulCount = 0;
-    
-    for (let i = 0; i < total; i++) {
-        const item = selectedList[i];
-        bulkBtn.innerHTML = `<span class="btn-text">IMPORTING ${i+1}/${total}...</span>`;
-        
-        try {
-            // Check cached library first for instant skip
-            if (state.radarrLibrary.has(item.tmdb_id)) {
-                successfulCount++;
-                continue;
-            }
-
-            // Lookup in Radarr to get movie metadata for the POST payload
-            const lookup = await callRadarrAPI(`movie/lookup?term=tmdb:${item.tmdb_id}`, 'GET');
-            if (!lookup || lookup.length === 0) {
-                console.warn(`Bulk: Radarr lookup returned empty for ${item.title}`);
-                continue;
-            }
-
-            const tmdbMovieResp = await fetch(`https://api.themoviedb.org/3/movie/${item.tmdb_id}?api_key=${state.apiKey}`);
-            const tmdbMovie = await tmdbMovieResp.json();
-
-            const rMovie = lookup[0];
-            const postData = {
-                title: rMovie.title,
-                titleSlug: rMovie.titleSlug,
-                images: rMovie.images,
-                year: rMovie.year,
-                tmdbId: tmdbMovie.id,
-                qualityProfileId: parseInt(state.radarr.qualityProfile),
-                rootFolderPath: state.radarr.rootFolder,
-                monitored: true,
-                addOptions: {
-                    searchForMovie: true
-                }
-            };
-
-            await callRadarrAPI('movie', 'POST', null, null, postData);
-            state.radarrLibrary.add(item.tmdb_id);
-            successfulCount++;
-        } catch (err) {
-            console.error(`Bulk addition failed for ${item.title}:`, err);
-        }
-    }
-
-    playSlashSound('stab');
-    bulkBtn.innerHTML = `<span class="btn-text">🟢 FINISHED! Added ${successfulCount} films.</span>`;
-    setTimeout(() => {
-        bulkBtn.disabled = false;
-        bulkBtn.innerHTML = '<span class="btn-text">🚀 BULK RADARR IMPORT</span>';
-        
-        // Refresh grid displays to check updated badges
-        triggerSearch();
-    }, 4000);
-}
-
-// --- CSV/TXT EXPORT ENGINES ---
-function exportSelectionsCSV() {
-    const list = Object.values(state.selectedMovies);
-    if (list.length === 0) return;
-
-    let csvContent = 'Title,Year,IMDb_ID,TMDb_ID\r\n';
-    list.forEach(m => {
-        const escapedTitle = m.title.replace(/"/g, '""');
-        const imdb = (m.imdb_id === 'FETCHING...') ? '' : m.imdb_id;
-        csvContent += `"${escapedTitle}",${m.year},${imdb},${m.tmdb_id}\r\n`;
-    });
-
-    triggerBlobDownload(csvContent, 'slasher_radarr_import.csv', 'text/csv;charset=utf-8;');
-}
-
-function exportSelectionsTXT() {
-    const list = Object.values(state.selectedMovies);
-    if (list.length === 0) return;
-
-    let txtContent = list.map(m => m.tmdb_id).join('\r\n');
-    triggerBlobDownload(txtContent, 'slasher_tmdb_ids.txt', 'text/plain;charset=utf-8;');
-}
-
-function triggerBlobDownload(content, filename, contentType) {
-    const blob = new Blob([content], { type: contentType });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename);
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    playSlashSound();
-}
 
 // --- UI STATUS SETTERS ---
 function showStatus(htmlContent, isError) {
