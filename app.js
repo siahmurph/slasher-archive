@@ -11,14 +11,14 @@ const state = {
         title: '',
         yearMin: '',
         yearMax: '',
-        includeGenres: [],
+        includeGenres: [27, 53, 9648], // Horror (27), Thriller (53), Mystery (9648)
         excludeGenres: [],
         actors: [], // array of { id, name }
         directors: [], // array of { id, name }
         excludeDirectors: '',
-        language: '',
+        language: 'en',
         upcomingReleases: false,
-        sortBy: 'popularity.desc'
+        sortBy: 'primary_release_date.desc'
     },
     currentPage: 1,
     totalPages: 1,
@@ -427,6 +427,13 @@ function createGenreCheckbox(genre, prefix) {
     checkbox.type = 'checkbox';
     checkbox.value = genre.id;
     checkbox.id = `${prefix}-genre-${genre.id}`;
+    
+    const val = parseInt(genre.id);
+    if (prefix === 'inc' && state.activeFilters.includeGenres.includes(val)) {
+        checkbox.checked = true;
+    } else if (prefix === 'exc' && state.activeFilters.excludeGenres.includes(val)) {
+        checkbox.checked = true;
+    }
     
     checkbox.addEventListener('change', () => {
         const val = parseInt(genre.id);
