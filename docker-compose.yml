@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  horror-radarr-exporter:
+    build: .
+    container_name: horror-radarr-exporter
+    restart: unless-stopped
+    ports:
+      - "8383:80"

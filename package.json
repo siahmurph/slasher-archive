@@ -1,0 +1,16 @@
+{
+  "name": "slasher-archive",
+  "version": "1.1.0",
+  "description": "70s/80s horror themed movie search and Radarr integration utility",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.4.0",
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
