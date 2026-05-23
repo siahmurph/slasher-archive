@@ -1,6 +1,6 @@
 # 🩸 SLASHER ARCHIVE
 
-[![Build and Publish Docker Image](https://github.com/REPLACE_WITH_YOUR_GITHUB_USERNAME/slasher-archive/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/REPLACE_WITH_YOUR_GITHUB_USERNAME/slasher-archive/actions/workflows/docker-publish.yml)
+[![Build and Publish Docker Image](https://github.com/siahmurph/slasher-archive/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/siahmurph/slasher-archive/actions/workflows/docker-publish.yml)
 
 > *"The ultimate vintage 70s gothic & 80s slasher styled horror search engine and Radarr integration utility."*
 
@@ -31,7 +31,7 @@ To start the Slasher Archive locally:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/YOUR_GITHUB_USERNAME/slasher-archive.git
+   git clone https://github.com/siahmurph/slasher-archive.git
    cd slasher-archive
    ```
 2. Install production dependencies:
@@ -83,7 +83,7 @@ version: '3.8'
 
 services:
   slasher-archive:
-    image: ghcr.io/YOUR_GITHUB_USERNAME/slasher-archive:latest
+    image: ghcr.io/siahmurph/slasher-archive:latest
     container_name: slasher-archive
     restart: unless-stopped
     ports:
