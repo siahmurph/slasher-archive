@@ -8,4 +8,4 @@ services:
     ports:
       - "8383:80"
     volumes:
-      - ./config:/app/config
+      - /opt/appdata/slasher-archive:/app/config
