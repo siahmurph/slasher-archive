@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  horror-radarr-exporter:
-    build: .
-    container_name: horror-radarr-exporter
+  slasher-archive:
+    image: ghcr.io/siahmurph/slasher-archive:latest
+    container_name: slasher-archive
     restart: unless-stopped
     ports:
       - "8383:80"
