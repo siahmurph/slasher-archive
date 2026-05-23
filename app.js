@@ -1045,6 +1045,8 @@ async function addMovieToRadarr(tmdbId) {
 
         // Post additions directly
         const result = await callRadarrAPI('movie', 'POST', null, null, postData);
+        console.log('Radarr POST response:', result);
+        
         if (result && result.id) {
             playSlashSound('stab');
             if (detailActionDiv) {
@@ -1055,7 +1057,9 @@ async function addMovieToRadarr(tmdbId) {
                 `;
             }
         } else {
-            throw new Error('Radarr return payload invalid');
+            console.warn('Radarr returned payload missing ID:', result);
+            const stringified = typeof result === 'object' ? JSON.stringify(result) : String(result);
+            throw new Error(`Radarr return payload invalid: ${stringified}`);
         }
     } catch (err) {
         console.error('Radarr import failed:', err);
