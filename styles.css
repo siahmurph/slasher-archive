@@ -724,6 +724,16 @@ body.crt-enabled .crt-overlay {
     gap: 3px;
 }
 
+/* In Library VHS Tape State */
+.vhs-movie-card.in-library {
+    border-color: rgba(60, 240, 136, 0.25); /* Subtle green border for owned tapes */
+}
+
+.vhs-movie-card.in-library:hover {
+    border-color: var(--typewriter-green);
+    box-shadow: 0 0 20px rgba(60, 240, 136, 0.4), inset 0 0 10px rgba(60, 240, 136, 0.15);
+}
+
 /* Checked/Selected State */
 .vhs-movie-card.selected {
     border-color: var(--parchment-gold); /* Candlelight gold for locked-in selections */
@@ -749,6 +759,25 @@ body.crt-enabled .crt-overlay {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
     z-index: 5;
     animation: badge-pop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* "In Library" VHS Tape Label Sticker */
+.card-library-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background-color: var(--typewriter-green);
+    color: #000000;
+    border: 2px solid #000000;
+    border-radius: 3px;
+    font-size: 0.62rem;
+    font-family: var(--font-code), monospace;
+    font-weight: 900;
+    padding: 3px 6px;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.7);
+    z-index: 5;
+    animation: badge-pop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    letter-spacing: 0.5px;
 }
 
 @keyframes badge-pop {

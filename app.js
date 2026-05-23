@@ -23,6 +23,8 @@ const state = {
     currentPage: 1,
     totalPages: 1,
     moviesOnPage: [],
+    currentlyRenderedMovies: [],
+    radarrLibrary: new Set(),
 
     // Radarr Configs
     radarr: {
@@ -397,6 +399,12 @@ function initRadarrHandshake() {
                 state.radarr.connected = true;
                 
                 playSlashSound('stab');
+
+                // Sync library and update existing cards
+                await syncRadarrLibrary();
+                if (state.currentlyRenderedMovies && state.currentlyRenderedMovies.length > 0) {
+                    renderMovieShelf(state.currentlyRenderedMovies);
+                }
             } else {
                 throw new Error('Retrieved payload empty');
             }
@@ -436,6 +444,25 @@ async function callRadarrAPI(endpoint, method = 'GET', customUrl = null, customK
     }
 
     return await response.json();
+}
+
+// --- SYNC RADARR LIBRARY ---
+async function syncRadarrLibrary() {
+    if (!state.radarr.connected) return;
+    try {
+        const movies = await callRadarrAPI('movie', 'GET');
+        state.radarrLibrary.clear();
+        if (Array.isArray(movies)) {
+            movies.forEach(m => {
+                if (m.tmdbId) {
+                    state.radarrLibrary.add(m.tmdbId);
+                }
+            });
+        }
+        console.log(`Synced Radarr Library: ${state.radarrLibrary.size} movies cached.`);
+    } catch (err) {
+        console.warn('Failed to sync Radarr library:', err);
+    }
 }
 
 // --- FETCH TMDB GENRES ---
@@ -804,13 +831,15 @@ async function triggerSearch() {
 
 // --- RENDER MOVIE GRID SHELF ---
 function renderMovieShelf(movies) {
+    state.currentlyRenderedMovies = movies;
     elements.movieShelf.innerHTML = '';
     
     movies.forEach(movie => {
         const isSelected = !!state.selectedMovies[movie.id];
+        const inLibrary = state.radarr.connected && state.radarrLibrary.has(movie.id);
         
         const card = document.createElement('div');
-        card.className = `vhs-movie-card ${isSelected ? 'selected' : ''}`;
+        card.className = `vhs-movie-card ${isSelected ? 'selected' : ''} ${inLibrary ? 'in-library' : ''}`;
         card.setAttribute('data-id', movie.id);
         
         let posterHTML = '';
@@ -825,11 +854,12 @@ function renderMovieShelf(movies) {
             `;
         }
 
-        const score = movie.vote_average ? movie.vote_average.toFixed(1) : '?.?';
+        const score = (typeof movie.vote_average === 'number' && movie.vote_average > 0) ? movie.vote_average.toFixed(1) : '?.?';
         const year = movie.release_date ? movie.release_date.split('-')[0] : 'N/A';
 
         card.innerHTML = `
             ${isSelected ? '<div class="card-checked-badge">✓</div>' : ''}
+            ${inLibrary ? '<div class="card-library-badge">🟢 IN LIBRARY</div>' : ''}
             <div class="card-poster-wrap">
                 ${posterHTML}
             </div>
@@ -879,6 +909,7 @@ async function loadMovieDetailPopup(movieSummary) {
         const year = detail.release_date ? detail.release_date.split('-')[0] : 'N/A';
         const runtime = detail.runtime ? `${detail.runtime} mins` : 'N/A';
         const genresList = detail.genres?.map(g => g.name.toUpperCase()).join(' | ') || 'UNKNOWN';
+        const ratingText = (typeof detail.vote_average === 'number' && detail.vote_average > 0) ? `${detail.vote_average.toFixed(1)} / 10` : '?.? / 10';
 
         // Check selection basket state
         const isSelected = !!state.selectedMovies[movieId];
@@ -923,7 +954,7 @@ async function loadMovieDetailPopup(movieSummary) {
                 <div class="detail-info-side">
                     <div class="detail-meta-list">
                         <span class="meta-pill pill-year">${year}</span>
-                        <span class="meta-pill pill-rating">🩸 ${detail.vote_average.toFixed(1)} / 10</span>
+                        <span class="meta-pill pill-rating">🩸 ${ratingText}</span>
                         <span class="meta-pill">${runtime}</span>
                         <span class="meta-pill" style="border-color: var(--border-dim);">${detail.original_language.toUpperCase()}</span>
                     </div>
@@ -983,8 +1014,8 @@ async function checkRadarrStatus(tmdbId) {
         const detailActionDiv = document.getElementById('detailRadarrAction');
         if (!detailActionDiv) return;
 
-        // Check database presence via ID, inLibrary boolean, or added timestamp
-        if (lookup && lookup.length > 0 && (lookup[0].id || lookup[0].inLibrary || lookup[0].added)) {
+        // Check database presence via ID or inLibrary boolean (avoids C# zero-date string truthiness bugs)
+        if (lookup && lookup.length > 0 && (lookup[0].id > 0 || lookup[0].inLibrary === true)) {
             // Already added in Radarr!
             detailActionDiv.innerHTML = `
                 <div class="radarr-status-badge">
@@ -1053,6 +1084,10 @@ async function addMovieToRadarr(tmdbId) {
         
         if (movieObj && movieObj.id) {
             playSlashSound('stab');
+            state.radarrLibrary.add(tmdbId);
+            if (state.currentlyRenderedMovies && state.currentlyRenderedMovies.length > 0) {
+                renderMovieShelf(state.currentlyRenderedMovies);
+            }
             if (detailActionDiv) {
                 detailActionDiv.innerHTML = `
                     <div class="radarr-status-badge">
@@ -1213,10 +1248,11 @@ async function triggerBulkRadarrImport() {
         bulkBtn.innerHTML = `<span class="btn-text">IMPORTING ${i+1}/${total}...</span>`;
         
         try {
-            // Verify if already inside Radarr via ID, inLibrary status, or added date
+            // Verify if already inside Radarr via ID or inLibrary status
             const lookup = await callRadarrAPI(`movie/lookup?term=tmdb:${item.tmdb_id}`, 'GET');
-            if (lookup && lookup.length > 0 && (lookup[0].id || lookup[0].inLibrary || lookup[0].added)) {
+            if (lookup && lookup.length > 0 && (lookup[0].id > 0 || lookup[0].inLibrary === true)) {
                 // Skip if already in library
+                state.radarrLibrary.add(item.tmdb_id);
                 successfulCount++;
                 continue;
             }
@@ -1240,6 +1276,7 @@ async function triggerBulkRadarrImport() {
             };
 
             await callRadarrAPI('movie', 'POST', null, null, postData);
+            state.radarrLibrary.add(item.tmdb_id);
             successfulCount++;
         } catch (err) {
             console.error(`Bulk addition failed for ${item.title}:`, err);
