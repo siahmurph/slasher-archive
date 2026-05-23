@@ -983,7 +983,8 @@ async function checkRadarrStatus(tmdbId) {
         const detailActionDiv = document.getElementById('detailRadarrAction');
         if (!detailActionDiv) return;
 
-        if (lookup && lookup.length > 0 && lookup[0].id) {
+        // Check database presence via ID, inLibrary boolean, or added timestamp
+        if (lookup && lookup.length > 0 && (lookup[0].id || lookup[0].inLibrary || lookup[0].added)) {
             // Already added in Radarr!
             detailActionDiv.innerHTML = `
                 <div class="radarr-status-badge">
@@ -1047,7 +1048,10 @@ async function addMovieToRadarr(tmdbId) {
         const result = await callRadarrAPI('movie', 'POST', null, null, postData);
         console.log('Radarr POST response:', result);
         
-        if (result && result.id) {
+        // Dynamically unwrap if Radarr wraps the created movie in an array
+        const movieObj = Array.isArray(result) ? result[0] : result;
+        
+        if (movieObj && movieObj.id) {
             playSlashSound('stab');
             if (detailActionDiv) {
                 detailActionDiv.innerHTML = `
@@ -1209,9 +1213,9 @@ async function triggerBulkRadarrImport() {
         bulkBtn.innerHTML = `<span class="btn-text">IMPORTING ${i+1}/${total}...</span>`;
         
         try {
-            // Verify if already inside Radarr
+            // Verify if already inside Radarr via ID, inLibrary status, or added date
             const lookup = await callRadarrAPI(`movie/lookup?term=tmdb:${item.tmdb_id}`, 'GET');
-            if (lookup && lookup.length > 0 && lookup[0].id) {
+            if (lookup && lookup.length > 0 && (lookup[0].id || lookup[0].inLibrary || lookup[0].added)) {
                 // Skip if already in library
                 successfulCount++;
                 continue;
