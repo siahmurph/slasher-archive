@@ -698,60 +698,71 @@ async function triggerSearch() {
     elements.projectionTopBar.style.display = 'none';
 
     try {
-        let url = new URL('https://api.themoviedb.org/3/discover/movie');
+        let url;
+        const isTextSearch = !!state.activeFilters.title.trim();
+
+        if (isTextSearch) {
+            // Text Search API
+            url = new URL('https://api.themoviedb.org/3/search/movie');
+            url.searchParams.append('query', state.activeFilters.title.trim());
+        } else {
+            // Discover API
+            url = new URL('https://api.themoviedb.org/3/discover/movie');
+            url.searchParams.append('sort_by', state.activeFilters.upcomingReleases ? 'primary_release_date.asc' : state.activeFilters.sortBy);
+            
+            // Inclusion Genres
+            if (state.activeFilters.includeGenres.length > 0) {
+                url.searchParams.append('with_genres', state.activeFilters.includeGenres.join(','));
+            }
+
+            // Exclusion Genres
+            if (state.activeFilters.excludeGenres.length > 0) {
+                url.searchParams.append('without_genres', state.activeFilters.excludeGenres.join(','));
+            }
+
+            // Release date boundaries (dynamic 90-day upcoming preset, or manually set timelines)
+            if (state.activeFilters.upcomingReleases) {
+                const today = new Date();
+                const formatLocalDate = (date) => {
+                    const yyyy = date.getFullYear();
+                    const mm = String(date.getMonth() + 1).padStart(2, '0');
+                    const dd = String(date.getDate()).padStart(2, '0');
+                    return `${yyyy}-${mm}-${dd}`;
+                };
+                
+                const dateMin = formatLocalDate(today);
+                const futureDate = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
+                const dateMax = formatLocalDate(futureDate);
+                
+                url.searchParams.append('primary_release_date.gte', dateMin);
+                url.searchParams.append('primary_release_date.lte', dateMax);
+            } else {
+                if (state.activeFilters.yearMin) {
+                    url.searchParams.append('primary_release_date.gte', `${state.activeFilters.yearMin}-01-01`);
+                }
+                if (state.activeFilters.yearMax) {
+                    url.searchParams.append('primary_release_date.lte', `${state.activeFilters.yearMax}-12-31`);
+                }
+            }
+
+            // Language
+            if (state.activeFilters.language) {
+                url.searchParams.append('with_original_language', state.activeFilters.language);
+            }
+
+            // Cast/Crew filters
+            if (state.activeFilters.actors.length > 0) {
+                url.searchParams.append('with_cast', state.activeFilters.actors.map(a => a.id).join(','));
+            }
+            if (state.activeFilters.directors.length > 0) {
+                url.searchParams.append('with_crew', state.activeFilters.directors.map(d => d.id).join(','));
+            }
+        }
+
         url.searchParams.append('api_key', state.apiKey);
         url.searchParams.append('language', 'en-US');
         url.searchParams.append('page', state.currentPage);
-        url.searchParams.append('sort_by', state.activeFilters.upcomingReleases ? 'primary_release_date.asc' : state.activeFilters.sortBy);
         url.searchParams.append('include_adult', 'false');
-
-        // Inclusion Genres
-        if (state.activeFilters.includeGenres.length > 0) {
-            url.searchParams.append('with_genres', state.activeFilters.includeGenres.join(','));
-        }
-
-        // Exclusion Genres
-        if (state.activeFilters.excludeGenres.length > 0) {
-            url.searchParams.append('without_genres', state.activeFilters.excludeGenres.join(','));
-        }
-
-        // Release date boundaries (dynamic 90-day upcoming preset, or manually set timelines)
-        if (state.activeFilters.upcomingReleases) {
-            const today = new Date();
-            const formatLocalDate = (date) => {
-                const yyyy = date.getFullYear();
-                const mm = String(date.getMonth() + 1).padStart(2, '0');
-                const dd = String(date.getDate()).padStart(2, '0');
-                return `${yyyy}-${mm}-${dd}`;
-            };
-            
-            const dateMin = formatLocalDate(today);
-            const futureDate = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
-            const dateMax = formatLocalDate(futureDate);
-            
-            url.searchParams.append('primary_release_date.gte', dateMin);
-            url.searchParams.append('primary_release_date.lte', dateMax);
-        } else {
-            if (state.activeFilters.yearMin) {
-                url.searchParams.append('primary_release_date.gte', `${state.activeFilters.yearMin}-01-01`);
-            }
-            if (state.activeFilters.yearMax) {
-                url.searchParams.append('primary_release_date.lte', `${state.activeFilters.yearMax}-12-31`);
-            }
-        }
-
-        // Language
-        if (state.activeFilters.language) {
-            url.searchParams.append('with_original_language', state.activeFilters.language);
-        }
-
-        // Cast/Crew filters
-        if (state.activeFilters.actors.length > 0) {
-            url.searchParams.append('with_cast', state.activeFilters.actors.map(a => a.id).join(','));
-        }
-        if (state.activeFilters.directors.length > 0) {
-            url.searchParams.append('with_crew', state.activeFilters.directors.map(d => d.id).join(','));
-        }
 
         const response = await fetch(url.toString());
         if (!response.ok) {
@@ -772,13 +783,44 @@ async function triggerSearch() {
         // --- CLIENT-SIDE POST-FILTERING ---
         let filteredMovies = [...state.moviesOnPage];
 
-        // 1. Text Search Filter (Titles)
-        if (state.activeFilters.title.trim()) {
-            const query = state.activeFilters.title.toLowerCase();
-            filteredMovies = filteredMovies.filter(movie => 
-                movie.title.toLowerCase().includes(query) || 
-                (movie.original_title && movie.original_title.toLowerCase().includes(query))
-            );
+        // 1. If it was a Text Search, apply filters client-side
+        if (isTextSearch) {
+            // A. Release Year Range
+            if (state.activeFilters.yearMin) {
+                const yMin = parseInt(state.activeFilters.yearMin);
+                filteredMovies = filteredMovies.filter(movie => {
+                    const y = movie.release_date ? parseInt(movie.release_date.split('-')[0]) : 0;
+                    return y >= yMin;
+                });
+            }
+            if (state.activeFilters.yearMax) {
+                const yMax = parseInt(state.activeFilters.yearMax);
+                filteredMovies = filteredMovies.filter(movie => {
+                    const y = movie.release_date ? parseInt(movie.release_date.split('-')[0]) : 0;
+                    return y <= yMax;
+                });
+            }
+
+            // B. Language
+            if (state.activeFilters.language) {
+                filteredMovies = filteredMovies.filter(movie => 
+                    movie.original_language === state.activeFilters.language
+                );
+            }
+
+            // C. Inclusion Genres
+            if (state.activeFilters.includeGenres.length > 0) {
+                filteredMovies = filteredMovies.filter(movie => 
+                    movie.genre_ids && state.activeFilters.includeGenres.every(gId => movie.genre_ids.includes(gId))
+                );
+            }
+
+            // D. Exclusion Genres
+            if (state.activeFilters.excludeGenres.length > 0) {
+                filteredMovies = filteredMovies.filter(movie => 
+                    movie.genre_ids && !state.activeFilters.excludeGenres.some(gId => movie.genre_ids.includes(gId))
+                );
+            }
         }
 
         // 2. Exclusionary Directors Filter
@@ -844,7 +886,7 @@ function renderMovieShelf(movies) {
         
         let posterHTML = '';
         if (movie.poster_path) {
-            posterHTML = `<img src="https://image.tmdb.org/t/p/w342${movie.poster_path}" alt="${movie.title}" class="card-poster" loading="lazy">`;
+            posterHTML = `<img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" alt="${movie.title}" class="card-poster" loading="lazy">`;
         } else {
             posterHTML = `
                 <div class="poster-placeholder">
@@ -854,7 +896,8 @@ function renderMovieShelf(movies) {
             `;
         }
 
-        const score = (typeof movie.vote_average === 'number' && movie.vote_average > 0) ? movie.vote_average.toFixed(1) : '?.?';
+        const scoreVal = parseFloat(movie.vote_average);
+        const score = (!isNaN(scoreVal) && scoreVal > 0) ? scoreVal.toFixed(1) : '?.?';
         const year = movie.release_date ? movie.release_date.split('-')[0] : 'N/A';
 
         card.innerHTML = `
@@ -903,13 +946,14 @@ async function loadMovieDetailPopup(movieSummary) {
 
         // Extract metadata variables
         const backdrop = detail.backdrop_path ? `https://image.tmdb.org/t/p/w1280${detail.backdrop_path}` : '';
-        const poster = detail.poster_path ? `https://image.tmdb.org/t/p/w342${detail.poster_path}` : '';
+        const poster = detail.poster_path ? `https://image.tmdb.org/t/p/w500${detail.poster_path}` : '';
         const directors = detail.credits?.crew?.filter(c => c.job === 'Director').map(d => d.name).join(', ') || 'Unknown';
         const cast = detail.credits?.cast?.slice(0, 5).map(c => c.name).join(', ') || 'Unknown';
         const year = detail.release_date ? detail.release_date.split('-')[0] : 'N/A';
         const runtime = detail.runtime ? `${detail.runtime} mins` : 'N/A';
         const genresList = detail.genres?.map(g => g.name.toUpperCase()).join(' | ') || 'UNKNOWN';
-        const ratingText = (typeof detail.vote_average === 'number' && detail.vote_average > 0) ? `${detail.vote_average.toFixed(1)} / 10` : '?.? / 10';
+        const ratingVal = parseFloat(detail.vote_average);
+        const ratingText = (!isNaN(ratingVal) && ratingVal > 0) ? `${ratingVal.toFixed(1)} / 10` : '?.? / 10';
 
         // Check selection basket state
         const isSelected = !!state.selectedMovies[movieId];
@@ -1008,38 +1052,27 @@ async function loadMovieDetailPopup(movieSummary) {
 
 // --- DIRECT RADARR API IMPORT WRAPPER ---
 async function checkRadarrStatus(tmdbId) {
-    try {
-        // RADARR Lookup API check
-        const lookup = await callRadarrAPI(`movie/lookup?term=tmdb:${tmdbId}`, 'GET');
-        const detailActionDiv = document.getElementById('detailRadarrAction');
-        if (!detailActionDiv) return;
+    const detailActionDiv = document.getElementById('detailRadarrAction');
+    if (!detailActionDiv) return;
 
-        // Check database presence via ID or inLibrary boolean (avoids C# zero-date string truthiness bugs)
-        if (lookup && lookup.length > 0 && (lookup[0].id > 0 || lookup[0].inLibrary === true)) {
-            // Already added in Radarr!
-            detailActionDiv.innerHTML = `
-                <div class="radarr-status-badge">
-                    🟢 MOVIE DETECTED IN RADARR LIBRARY
-                </div>
-            `;
-        } else {
-            // Not in Radarr yet, show Add Button
-            detailActionDiv.innerHTML = `
-                <button class="blood-btn btn-radarr-add" id="btnRadarrImportNow">
-                    <span class="btn-text">🩸 IMPORT DIRECTLY INTO RADARR</span>
-                </button>
-            `;
+    // Use cached library Set for instant, reliable detection
+    if (state.radarrLibrary.has(tmdbId)) {
+        detailActionDiv.innerHTML = `
+            <div class="radarr-status-badge">
+                🟢 MOVIE DETECTED IN RADARR LIBRARY
+            </div>
+        `;
+    } else {
+        // Not in Radarr yet, show Add Button
+        detailActionDiv.innerHTML = `
+            <button class="blood-btn btn-radarr-add" id="btnRadarrImportNow">
+                <span class="btn-text">🩸 IMPORT DIRECTLY INTO RADARR</span>
+            </button>
+        `;
 
-            document.getElementById('btnRadarrImportNow').addEventListener('click', async () => {
-                await addMovieToRadarr(tmdbId);
-            });
-        }
-    } catch (err) {
-        console.warn('Failed querying Radarr search status:', err);
-        const detailActionDiv = document.getElementById('detailRadarrAction');
-        if (detailActionDiv) {
-            detailActionDiv.innerHTML = `<div class="loading-small" style="color:var(--neon-crimson)">Radarr check failed: ${err.message}</div>`;
-        }
+        document.getElementById('btnRadarrImportNow').addEventListener('click', async () => {
+            await addMovieToRadarr(tmdbId);
+        });
     }
 }
 
@@ -1248,12 +1281,16 @@ async function triggerBulkRadarrImport() {
         bulkBtn.innerHTML = `<span class="btn-text">IMPORTING ${i+1}/${total}...</span>`;
         
         try {
-            // Verify if already inside Radarr via ID or inLibrary status
-            const lookup = await callRadarrAPI(`movie/lookup?term=tmdb:${item.tmdb_id}`, 'GET');
-            if (lookup && lookup.length > 0 && (lookup[0].id > 0 || lookup[0].inLibrary === true)) {
-                // Skip if already in library
-                state.radarrLibrary.add(item.tmdb_id);
+            // Check cached library first for instant skip
+            if (state.radarrLibrary.has(item.tmdb_id)) {
                 successfulCount++;
+                continue;
+            }
+
+            // Lookup in Radarr to get movie metadata for the POST payload
+            const lookup = await callRadarrAPI(`movie/lookup?term=tmdb:${item.tmdb_id}`, 'GET');
+            if (!lookup || lookup.length === 0) {
+                console.warn(`Bulk: Radarr lookup returned empty for ${item.title}`);
                 continue;
             }
 

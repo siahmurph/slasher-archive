@@ -79,10 +79,28 @@ app.all('/api/radarr/*', async (req, res) => {
                 'Content-Type': 'application/json'
             },
             params: req.query,
-            data: req.body
+            data: req.body,
+            maxRedirects: 0,              // Prevent Axios from auto-following redirects (which downgrades POST to GET)
+            validateStatus: (status) => status < 400 || status === 301 || status === 302 || status === 307 || status === 308
         };
 
-        const response = await axios(config);
+        console.log(`[Radarr Proxy] Routing ${config.method} -> ${config.url}`);
+        if (config.method !== 'GET') {
+            console.log(`[Radarr Proxy] Payload:`, JSON.stringify(config.data));
+        }
+
+        let response = await axios(config);
+
+        // If we got a redirect, re-issue the request to the new Location with the ORIGINAL method
+        if ([301, 302, 307, 308].includes(response.status) && response.headers.location) {
+            const redirectUrl = response.headers.location;
+            console.log(`[Radarr Proxy] Following redirect: ${response.status} -> ${redirectUrl} (preserving ${config.method})`);
+            config.url = redirectUrl;
+            config.validateStatus = (status) => status < 400;
+            response = await axios(config);
+        }
+
+        console.log(`[Radarr Proxy] Response from Radarr: Status ${response.status}`);
         res.status(response.status).json(response.data);
     } catch (error) {
         console.error('Radarr Proxy Server Error:', error.message);

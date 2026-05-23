@@ -597,8 +597,8 @@ body.crt-enabled .crt-overlay {
 
 /* VHS CASSETTE MOVIE CARD AESTHETIC */
 .vhs-movie-card {
-    background-color: var(--card-back);
-    border: 2px solid var(--border-dim); /* Thicker, high-fidelity casing border */
+    background-color: #120e0e;
+    border: 2px solid #3d2626; /* Visible warm-brown casing edge */
     border-radius: 4px;
     overflow: hidden;
     position: relative;
@@ -607,7 +607,7 @@ body.crt-enabled .crt-overlay {
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
     box-shadow: 0 6px 15px rgba(0, 0, 0, 0.6);
-    padding: 10px 10px 0 10px; /* Add inner border padding, separating poster from border to prevent clipping */
+    padding: 8px 8px 0 8px;
 }
 
 /* VHS Tape Spine Overlay representation */
@@ -629,20 +629,25 @@ body.crt-enabled .crt-overlay {
     z-index: 4;
 }
 
-/* Poster wrapping and sizing */
+/* Poster wrapping and sizing — the VHS label window */
 .card-poster-wrap {
     width: 100%;
     aspect-ratio: 2/3;
     position: relative;
     overflow: hidden;
     background-color: #09090b;
+    border: 1px solid #3d2626;
+    border-radius: 2px;
+    box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.8);
 }
 
 .card-poster {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    display: block;
     transition: transform 0.5s ease;
+    image-rendering: auto;
 }
 
 /* Placeholder poster for missing art */
@@ -724,7 +729,13 @@ body.crt-enabled .crt-overlay {
     gap: 3px;
 }
 
-/* In Library VHS Tape State */
+/* Card Hover lighting - Brighter, pulsing Neon Crimson Glow! */
+.vhs-movie-card:hover {
+    border-color: var(--neon-crimson);
+    box-shadow: 0 0 20px var(--neon-crimson), inset 0 0 10px rgba(255, 28, 69, 0.2);
+}
+
+/* In Library VHS Tape State - must come AFTER generic hover for specificity */
 .vhs-movie-card.in-library {
     border-color: rgba(60, 240, 136, 0.25); /* Subtle green border for owned tapes */
 }
@@ -734,7 +745,7 @@ body.crt-enabled .crt-overlay {
     box-shadow: 0 0 20px rgba(60, 240, 136, 0.4), inset 0 0 10px rgba(60, 240, 136, 0.15);
 }
 
-/* Checked/Selected State */
+/* Checked/Selected State - highest visual priority */
 .vhs-movie-card.selected {
     border-color: var(--parchment-gold); /* Candlelight gold for locked-in selections */
     box-shadow: 0 0 20px var(--parchment-gold), inset 0 0 8px rgba(226, 193, 92, 0.2);
@@ -748,12 +759,12 @@ body.crt-enabled .crt-overlay {
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background-color: var(--parchment-gold); /* Candlelight gold matching selected borders */
-    border: 2px solid #000; /* High contrast black trim */
+    background-color: var(--parchment-gold);
+    border: 2px solid #000;
     display: flex;
     justify-content: center;
     align-items: center;
-    color: #000; /* High contrast black checkmark */
+    color: #000;
     font-weight: bold;
     font-size: 14px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
@@ -783,12 +794,6 @@ body.crt-enabled .crt-overlay {
 @keyframes badge-pop {
     0% { transform: scale(0); }
     100% { transform: scale(1); }
-}
-
-/* Card Hover lighting - Brighter, pulsing Neon Crimson Glow! */
-.vhs-movie-card:hover {
-    border-color: var(--neon-crimson);
-    box-shadow: 0 0 20px var(--neon-crimson), inset 0 0 10px rgba(255, 28, 69, 0.2);
 }
 
 /* ----------------------------------------------------
