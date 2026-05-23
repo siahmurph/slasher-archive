@@ -103,7 +103,7 @@ const elements = {
 };
 
 // --- INITIALIZATION ---
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
     initCRT();
     initModals();
     initFilters();
@@ -111,14 +111,45 @@ window.addEventListener('DOMContentLoaded', () => {
     initBasket();
     initRadarrHandshake();
 
-    if (state.apiKey) {
-        elements.tmdbApiKey.value = state.apiKey;
-        loadGenres();
-        triggerSearch();
-    } else {
+    // Retrieve server-side dynamic config
+    await loadServerConfig();
+});
+
+async function loadServerConfig() {
+    try {
+        const resp = await fetch('/api/config');
+        if (!resp.ok) throw new Error('Failed to load server configurations');
+        const config = await resp.json();
+
+        // Populate client state
+        state.apiKey = config.tmdbApiKey || '';
+        state.radarr.url = config.radarrUrl || '';
+        state.radarr.apiKey = config.radarrApiKey || '';
+        state.radarr.rootFolder = config.radarrRootFolder || '';
+        state.radarr.qualityProfile = config.radarrQualityProfile || '';
+
+        // Pre-fill HTML inputs
+        if (state.apiKey) elements.tmdbApiKey.value = state.apiKey;
+        if (state.radarr.url) elements.radarrUrl.value = state.radarr.url;
+        if (state.radarr.apiKey) elements.radarrApiKey.value = state.radarr.apiKey;
+
+        // Trigger startup search and genres retrieval
+        if (state.apiKey) {
+            loadGenres();
+            triggerSearch();
+        } else {
+            showConfigModal();
+        }
+
+        // Trigger auto-connect for Radarr paths in the background
+        if (state.radarr.url && state.radarr.apiKey) {
+            setTimeout(() => elements.btnConnectRadarr.click(), 400);
+        }
+    } catch (err) {
+        console.error('Failed loading server config on boot:', err);
         showConfigModal();
     }
-});
+}
 
 // --- RETRO SOUND SYNTHESIZER (Web Audio API) ---
 // Procedurally synthesizes a gothic slasher metallic blade swipe/stab sound
@@ -264,30 +295,44 @@ function hideMovieDetailModal() {
     elements.movieDetailModal.classList.remove('active');
 }
 
-function saveConfiguration() {
+async function saveConfiguration() {
     const key = elements.tmdbApiKey.value.trim();
     if (!key) {
         alert('Please enter a valid TMDb API Key.');
         return;
     }
-    state.apiKey = key;
-    localStorage.setItem('slasher_tmdb_key', key);
     
-    // Save Radarr settings
+    // Read current input settings
     const rUrl = elements.radarrUrl.value.trim();
     const rKey = elements.radarrApiKey.value.trim();
     const rRoot = elements.radarrRootFolder.value;
     const rProfile = elements.radarrQualityProfile.value;
 
+    state.apiKey = key;
     state.radarr.url = rUrl;
     state.radarr.apiKey = rKey;
     state.radarr.rootFolder = rRoot;
     state.radarr.qualityProfile = rProfile;
 
-    localStorage.setItem('slasher_radarr_url', rUrl);
-    localStorage.setItem('slasher_radarr_apikey', rKey);
-    localStorage.setItem('slasher_radarr_root_folder', rRoot);
-    localStorage.setItem('slasher_radarr_quality_profile', rProfile);
+    // Persist permanently on host server via REST call
+    try {
+        const resp = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tmdbApiKey: key,
+                radarrUrl: rUrl,
+                radarrApiKey: rKey,
+                radarrRootFolder: rRoot,
+                radarrQualityProfile: rProfile
+            })
+        });
+        if (!resp.ok) throw new Error('Server rejected configurations save request');
+        console.log('🟢 Credentials successfully persisted in config/config.json.');
+    } catch (err) {
+        console.error('Failed to write settings to server disk:', err);
+        alert(`Warning: Server-side write failed. Credentials will reset on container restart. Error: ${err.message}`);
+    }
 
     hideConfigModal();
     playSlashSound('stab');

@@ -598,15 +598,16 @@ body.crt-enabled .crt-overlay {
 /* VHS CASSETTE MOVIE CARD AESTHETIC */
 .vhs-movie-card {
     background-color: var(--card-back);
-    border: 1px solid var(--border-dim);
-    border-radius: 3px;
+    border: 2px solid var(--border-dim); /* Thicker, high-fidelity casing border */
+    border-radius: 4px;
     overflow: hidden;
     position: relative;
     display: flex;
     flex-direction: column;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.6);
+    padding: 10px 10px 0 10px; /* Add inner border padding, separating poster from border to prevent clipping */
 }
 
 /* VHS Tape Spine Overlay representation */
@@ -725,8 +726,8 @@ body.crt-enabled .crt-overlay {
 
 /* Checked/Selected State */
 .vhs-movie-card.selected {
-    border-color: var(--neon-crimson);
-    box-shadow: 0 0 18px var(--neon-crimson);
+    border-color: var(--parchment-gold); /* Candlelight gold for locked-in selections */
+    box-shadow: 0 0 20px var(--parchment-gold), inset 0 0 8px rgba(226, 193, 92, 0.2);
     transform: scale(1.02);
 }
 
@@ -737,12 +738,12 @@ body.crt-enabled .crt-overlay {
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background-color: var(--neon-crimson);
-    border: 2px solid #fff;
+    background-color: var(--parchment-gold); /* Candlelight gold matching selected borders */
+    border: 2px solid #000; /* High contrast black trim */
     display: flex;
     justify-content: center;
     align-items: center;
-    color: #fff;
+    color: #000; /* High contrast black checkmark */
     font-weight: bold;
     font-size: 14px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
@@ -755,10 +756,10 @@ body.crt-enabled .crt-overlay {
     100% { transform: scale(1); }
 }
 
-/* Card Hover lighting */
+/* Card Hover lighting - Brighter, pulsing Neon Crimson Glow! */
 .vhs-movie-card:hover {
-    border-color: var(--horror-red);
-    box-shadow: 0 0 12px rgba(139, 0, 0, 0.6);
+    border-color: var(--neon-crimson);
+    box-shadow: 0 0 20px var(--neon-crimson), inset 0 0 10px rgba(255, 28, 69, 0.2);
 }
 
 /* ----------------------------------------------------
