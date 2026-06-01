@@ -67,32 +67,32 @@
 
                     <!-- Include Genres -->
                     <div class="filter-group">
-                        <label class="filter-label">Include Genres</label>
-                        <div class="genre-selector-container" id="genresIncludeContainer">
+                        <div class="filter-label-row">
+                            <label class="filter-label">Include Genres</label>
+                            <button class="btn-clear-genres" id="btnClearIncludeGenres" title="Clear all">Clear</button>
+                        </div>
+                        <div class="genre-selector-container genre-include" id="genresIncludeContainer">
                             <div class="loading-small">Loading genres...</div>
                         </div>
                     </div>
 
                     <!-- Exclude Genres -->
                     <div class="filter-group">
-                        <label class="filter-label">Exclude Genres</label>
-                        <div class="genre-selector-container" id="genresExcludeContainer">
+                        <div class="filter-label-row">
+                            <label class="filter-label">Exclude Genres</label>
+                            <button class="btn-clear-genres" id="btnClearExcludeGenres" title="Clear all">Clear</button>
+                        </div>
+                        <div class="genre-selector-container genre-exclude" id="genresExcludeContainer">
                             <div class="loading-small">Loading genres...</div>
                         </div>
                     </div>
 
-                    <!-- Language -->
+                    <!-- English Only -->
                     <div class="filter-group">
-                        <label for="languageSelect" class="filter-label">Language</label>
-                        <select id="languageSelect" class="filter-input select-input">
-                            <option value="">Any Language</option>
-                            <option value="en" selected>English</option>
-                            <option value="it">Italian</option>
-                            <option value="ja">Japanese</option>
-                            <option value="es">Spanish</option>
-                            <option value="fr">French</option>
-                            <option value="de">German</option>
-                        </select>
+                        <label class="checkbox-label" for="englishOnly">
+                            <input type="checkbox" id="englishOnly" checked>
+                            English language only
+                        </label>
                     </div>
 
                 </div>
@@ -105,6 +105,7 @@
             <section class="results-panel" aria-label="Search Results">
                 <!-- Top bar -->
                 <div class="results-top-bar" id="projectionTopBar" style="display: none;">
+                    <div class="top-bar-spacer"></div>
                     <div class="results-count" id="resultsCount">0 films found</div>
                     <div class="top-bar-controls">
                         <label for="sortBySelect" class="top-bar-label">Sort:</label>

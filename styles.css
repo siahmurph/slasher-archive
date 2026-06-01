@@ -64,7 +64,7 @@ body {
     color: var(--text-primary);
     font-family: var(--font-body);
     font-size: 15px;
-    line-height: 1.5;
+    line-height: 1.7;
     overflow-x: hidden;
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
@@ -258,7 +258,7 @@ body {
 
 .filter-input {
     width: 100%;
-    padding: 8px 10px;
+    padding: 10px 12px;
     font-family: var(--font-body);
     font-size: 14px;
     color: var(--text-primary);
@@ -335,6 +335,30 @@ body {
 }
 
 /* Genre Selectors */
+.filter-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.btn-clear-genres {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: none;
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.btn-clear-genres:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+
 .genre-selector-container {
     background: var(--bg-surface-elevated);
     border: 1px solid var(--border-light);
@@ -344,6 +368,14 @@ body {
     display: flex;
     flex-direction: column;
     gap: 4px;
+}
+
+.genre-include {
+    max-height: 180px;
+}
+
+.genre-exclude {
+    max-height: 90px;
 }
 
 .genre-checkbox-label {
@@ -466,8 +498,12 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-bottom: 12px;
+    padding: 0 0 14px;
     border-bottom: 1px solid var(--border-light);
+}
+
+.top-bar-spacer {
+    flex: 1;
 }
 
 .results-count {
@@ -477,6 +513,8 @@ body {
     letter-spacing: 0.06em;
     color: var(--text-secondary);
     text-transform: uppercase;
+    flex: 1;
+    text-align: center;
 }
 
 .top-bar-controls {
@@ -619,7 +657,7 @@ body {
 
 /* Card Info */
 .card-info {
-    padding: 10px 12px;
+    padding: 12px 14px;
 }
 
 .card-title {

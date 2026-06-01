@@ -57,8 +57,10 @@ const elements = {
     genresIncludeContainer: document.getElementById('genresIncludeContainer'),
     genresExcludeContainer: document.getElementById('genresExcludeContainer'),
     runtimeMin: document.getElementById('runtimeMin'),
-    languageSelect: document.getElementById('languageSelect'),
+    englishOnly: document.getElementById('englishOnly'),
     btnSearch: document.getElementById('btnSearch'),
+    btnClearIncludeGenres: document.getElementById('btnClearIncludeGenres'),
+    btnClearExcludeGenres: document.getElementById('btnClearExcludeGenres'),
 
     // Top action bar
     projectionTopBar: document.getElementById('projectionTopBar'),
@@ -498,7 +500,9 @@ function initFilters() {
     elements.yearMax.addEventListener('change', (e) => state.activeFilters.yearMax = e.target.value);
 
     elements.runtimeMin.addEventListener('input', (e) => state.activeFilters.runtimeMin = e.target.value);
-    elements.languageSelect.addEventListener('change', (e) => state.activeFilters.language = e.target.value);
+    elements.englishOnly.addEventListener('change', (e) => {
+        state.activeFilters.language = e.target.checked ? 'en' : '';
+    });
 
     elements.sortBySelect.addEventListener('change', (e) => {
         state.activeFilters.sortBy = e.target.value;
@@ -508,6 +512,16 @@ function initFilters() {
 
     elements.upcomingReleases.addEventListener('change', (e) => {
         state.activeFilters.includeUnreleased = e.target.checked;
+    });
+
+    // Genre clear buttons
+    elements.btnClearIncludeGenres.addEventListener('click', () => {
+        state.activeFilters.includeGenres = [];
+        elements.genresIncludeContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+    });
+    elements.btnClearExcludeGenres.addEventListener('click', () => {
+        state.activeFilters.excludeGenres = [];
+        elements.genresExcludeContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
     });
 }
 
@@ -558,11 +572,14 @@ async function triggerSearch() {
                 maxDate.setDate(maxDate.getDate() + 30);
                 url.searchParams.append('primary_release_date.lte', formatLocalDate(maxDate));
             } else {
+                // Default: cap to today (no future films)
                 if (state.activeFilters.yearMin) {
                     url.searchParams.append('primary_release_date.gte', state.activeFilters.yearMin);
                 }
                 if (state.activeFilters.yearMax) {
                     url.searchParams.append('primary_release_date.lte', state.activeFilters.yearMax);
+                } else {
+                    url.searchParams.append('primary_release_date.lte', formatLocalDate(new Date()));
                 }
             }
 
