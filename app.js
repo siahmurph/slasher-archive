@@ -66,6 +66,7 @@ const elements = {
     projectionTopBar: document.getElementById('projectionTopBar'),
     resultsCount: document.getElementById('resultsCount'),
     sortBySelect: document.getElementById('sortBySelect'),
+    libraryFilter: document.getElementById('libraryFilter'),
 
     // Results
     slabStatus: document.getElementById('slabStatus'),
@@ -197,11 +198,20 @@ async function saveConfiguration() {
     const key = elements.tmdbApiKey.value.trim();
     if (!key) { alert('Please enter a valid TMDb API Key.'); return; }
 
-    const rUrl = elements.radarrUrl.value.trim();
+    let rUrl = elements.radarrUrl.value.trim();
+    if (rUrl && !/^https?:\/\//i.test(rUrl)) {
+        rUrl = 'http://' + rUrl;
+        elements.radarrUrl.value = rUrl;
+    }
     const rKey = elements.radarrApiKey.value.trim();
     const rRoot = elements.radarrRootFolder.value;
     const rProfile = elements.radarrQualityProfile.value;
-    const eUrl = elements.embyUrl.value.trim();
+
+    let eUrl = elements.embyUrl.value.trim();
+    if (eUrl && !/^https?:\/\//i.test(eUrl)) {
+        eUrl = 'http://' + eUrl;
+        elements.embyUrl.value = eUrl;
+    }
     const eKey = elements.embyApiKey.value.trim();
 
     state.apiKey = key;
@@ -241,7 +251,11 @@ async function saveConfiguration() {
 // --- RADARR HANDSHAKE ---
 function initRadarrHandshake() {
     elements.btnConnectRadarr.addEventListener('click', async () => {
-        const url = elements.radarrUrl.value.trim();
+        let url = elements.radarrUrl.value.trim();
+        if (url && !/^https?:\/\//i.test(url)) {
+            url = 'http://' + url;
+            elements.radarrUrl.value = url;
+        }
         const apiKey = elements.radarrApiKey.value.trim();
 
         if (!url || !apiKey) {
@@ -300,7 +314,10 @@ function initRadarrHandshake() {
 }
 
 async function callRadarrAPI(endpoint, method = 'GET', customUrl = null, customKey = null, body = null) {
-    const url = customUrl || state.radarr.url;
+    let url = customUrl || state.radarr.url;
+    if (url && !/^https?:\/\//i.test(url)) {
+        url = 'http://' + url;
+    }
     const apiKey = customKey || state.radarr.apiKey;
 
     const response = await fetch(`/api/radarr/${endpoint}`, {
@@ -314,7 +331,7 @@ async function callRadarrAPI(endpoint, method = 'GET', customUrl = null, customK
     });
 
     if (!response.ok) {
-        const errData = await response.json();
+        const errData = await response.json().catch(() => ({}));
         throw new Error(errData.error || errData.message || `HTTP ${response.status}`);
     }
 
@@ -338,7 +355,11 @@ async function syncRadarrLibrary() {
 // --- EMBY HANDSHAKE ---
 function initEmbyHandshake() {
     elements.btnConnectEmby.addEventListener('click', async () => {
-        const url = elements.embyUrl.value.trim();
+        let url = elements.embyUrl.value.trim();
+        if (url && !/^https?:\/\//i.test(url)) {
+            url = 'http://' + url;
+            elements.embyUrl.value = url;
+        }
         const apiKey = elements.embyApiKey.value.trim();
 
         if (!url || !apiKey) {
@@ -385,14 +406,17 @@ function initEmbyHandshake() {
 }
 
 async function callEmbyAPI(endpoint, params = {}, customUrl = null, customKey = null) {
-    const baseUrl = (customUrl || state.emby.url).replace(/\/+$/, '');
+    let baseUrl = (customUrl || state.emby.url).trim().replace(/\/+$/, '');
+    if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
+        baseUrl = 'http://' + baseUrl;
+    }
     const apiKey = customKey || state.emby.apiKey;
 
-    const url = new URL(`${baseUrl}/emby/${endpoint}`);
-    url.searchParams.append('api_key', apiKey);
-    Object.entries(params).forEach(([k, v]) => url.searchParams.append(k, v));
+    const searchParams = new URLSearchParams();
+    searchParams.append('api_key', apiKey);
+    Object.entries(params).forEach(([k, v]) => searchParams.append(k, v));
 
-    const response = await fetch(`/api/emby/${endpoint}?${url.searchParams.toString()}`, {
+    const response = await fetch(`/api/emby/${endpoint}?${searchParams.toString()}`, {
         method: 'GET',
         headers: {
             'X-Emby-Url': baseUrl,
@@ -510,6 +534,12 @@ function initFilters() {
         triggerSearch();
     });
 
+    elements.libraryFilter.addEventListener('change', () => {
+        if (state.currentlyRenderedMovies.length > 0) {
+            renderMovieShelf(state.currentlyRenderedMovies);
+        }
+    });
+
     elements.upcomingReleases.addEventListener('change', (e) => {
         state.activeFilters.includeUnreleased = e.target.checked;
     });
@@ -598,7 +628,7 @@ async function triggerSearch() {
 
         const response = await fetch(url.toString());
         if (!response.ok) {
-            const errData = await response.json();
+            const errData = await response.json().catch(() => ({}));
             throw new Error(errData.status_message || 'API query error');
         }
 
@@ -611,7 +641,7 @@ async function triggerSearch() {
             return;
         }
 
-        // Client-side filtering for text searches
+        // Client-side filtering for text searches (skip genres — title search should be genre-agnostic)
         let filteredMovies = [...state.moviesOnPage];
         if (isTextSearch) {
             if (state.activeFilters.yearMin) {
@@ -624,16 +654,6 @@ async function triggerSearch() {
             }
             if (state.activeFilters.language) {
                 filteredMovies = filteredMovies.filter(m => m.original_language === state.activeFilters.language);
-            }
-            if (state.activeFilters.includeGenres.length > 0) {
-                filteredMovies = filteredMovies.filter(m =>
-                    m.genre_ids && state.activeFilters.includeGenres.every(gId => m.genre_ids.includes(gId))
-                );
-            }
-            if (state.activeFilters.excludeGenres.length > 0) {
-                filteredMovies = filteredMovies.filter(m =>
-                    m.genre_ids && !state.activeFilters.excludeGenres.some(gId => m.genre_ids.includes(gId))
-                );
             }
         }
 
@@ -659,9 +679,16 @@ function renderMovieShelf(movies) {
     state.currentlyRenderedMovies = movies;
     elements.movieShelf.innerHTML = '';
 
+    const filterMode = elements.libraryFilter ? elements.libraryFilter.value : 'all';
+
     movies.forEach(movie => {
         const inEmby = state.emby.connected && state.embyLibrary.has(movie.id);
         const inRadarr = state.radarr.connected && state.radarrLibrary.has(movie.id);
+
+        // Apply library filter
+        if (filterMode === 'hide-library' && inEmby) return;
+        if (filterMode === 'library-only' && !inEmby) return;
+        if (filterMode === 'requested-only' && !inRadarr) return;
 
         const card = document.createElement('div');
         let statusClass = '';

@@ -105,7 +105,14 @@
             <section class="results-panel" aria-label="Search Results">
                 <!-- Top bar -->
                 <div class="results-top-bar" id="projectionTopBar" style="display: none;">
-                    <div class="top-bar-spacer"></div>
+                    <div class="top-bar-controls">
+                        <select id="libraryFilter" class="filter-input select-input">
+                            <option value="all">Show All</option>
+                            <option value="hide-library">Hide In Library</option>
+                            <option value="library-only">Library Only</option>
+                            <option value="requested-only">Requested Only</option>
+                        </select>
+                    </div>
                     <div class="results-count" id="resultsCount">0 films found</div>
                     <div class="top-bar-controls">
                         <label for="sortBySelect" class="top-bar-label">Sort:</label>

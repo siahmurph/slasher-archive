@@ -59,7 +59,10 @@ app.post('/api/config', (req, res) => {
 // Proxy requests to Radarr API (Reads credentials straight from server memory - secure & CORS-free!)
 app.all('/api/radarr/*', async (req, res) => {
     try {
-        const radarrUrl = req.headers['x-radarr-url'] || appConfig.radarrUrl;
+        let radarrUrl = req.headers['x-radarr-url'] || appConfig.radarrUrl;
+        if (radarrUrl && !/^https?:\/\//i.test(radarrUrl)) {
+            radarrUrl = 'http://' + radarrUrl;
+        }
         const radarrApiKey = req.headers['x-radarr-apikey'] || appConfig.radarrApiKey;
 
         if (!radarrUrl || !radarrApiKey) {
@@ -118,7 +121,10 @@ app.all('/api/radarr/*', async (req, res) => {
 // Proxy requests to Emby API
 app.all('/api/emby/*', async (req, res) => {
     try {
-        const embyUrl = req.headers['x-emby-url'] || appConfig.embyUrl;
+        let embyUrl = req.headers['x-emby-url'] || appConfig.embyUrl;
+        if (embyUrl && !/^https?:\/\//i.test(embyUrl)) {
+            embyUrl = 'http://' + embyUrl;
+        }
         const embyApiKey = req.headers['x-emby-apikey'] || appConfig.embyApiKey;
 
         if (!embyUrl || !embyApiKey) {

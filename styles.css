@@ -502,10 +502,6 @@ body {
     border-bottom: 1px solid var(--border-light);
 }
 
-.top-bar-spacer {
-    flex: 1;
-}
-
 .results-count {
     font-family: var(--font-mono);
     font-size: 12px;
