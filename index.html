@@ -3,294 +3,220 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Slasher Archive | Horror Movie Search & Radarr Exporter</title>
-    <meta name="description" content="A vintage 70s gothic & 80s slasher styled search engine for filtering movies and exporting them for Radarr custom lists.">
-    <!-- Google Fonts: Cinzel Decorative for gothic headlines, Creepster for slasher elements, Space Grotesk for sleek UI, and Courier Prime for typewriter fields -->
+    <title>Slasher Archive | Horror Film Discovery</title>
+    <meta name="description" content="A curated horror film discovery engine with Radarr and Emby integration.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Creepster&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="crt-enabled">
-    <!-- Ambient Overlay for CRT Scanline & Grain Effect -->
-    <div class="crt-overlay" id="crtOverlay"></div>
-    <div class="grain-overlay"></div>
-
+<body>
     <div class="app-container">
-        <!-- HEADER: Glowing Vintage Theater Marquee -->
+        <!-- HEADER -->
         <header class="app-header">
-            <div class="header-glitch-wrap">
-                <span class="marquee-sub">THE ULTIMATE RETRO SEARCH ENGINE</span>
-                <h1 class="marquee-title" id="mainTitle">SLASHER ARCHIVE</h1>
+            <div class="header-brand">
+                <span class="header-sub">CURATED HORROR CINEMA</span>
+                <h1 class="header-title" id="mainTitle">Slasher Archive</h1>
             </div>
             <div class="header-controls">
-                <button class="blood-btn config-btn" id="btnOpenConfig" title="Configure API Key and settings">
-                    <span class="btn-text">⚙ CONFIG</span>
-                </button>
-                <button class="blood-btn toggle-crt-btn" id="btnToggleCRT" title="Toggle retro CRT scanline overlay">
-                    <span class="btn-text">📺 CRT: ON</span>
+                <button class="btn btn-config" id="btnOpenConfig" title="Configure API keys and settings">
+                    <span class="btn-text">⚙ Settings</span>
                 </button>
             </div>
         </header>
 
         <!-- MAIN LAYOUT -->
         <main class="app-body">
-            <!-- SIDEBAR: Ritual Filters -->
-            <aside class="sidebar-vault" aria-label="Filters">
-                <h2 class="vault-title"><span class="icon">🩸</span> RITUAL FILTERS</h2>
-                <div class="vault-divider"></div>
-
-                <!-- Text Search -->
-                <div class="filter-group">
-                    <label for="searchTitle" class="filter-label">TEXT SEARCH</label>
-                    <input type="text" id="searchTitle" class="horror-input" placeholder="Enter movie title...">
-                    <button class="blood-btn search-submit-btn" id="btnSearch" style="margin-top: 10px;">
-                        <span class="btn-emoji">🔥</span> <span class="btn-text">SUMMON FILMS</span>
-                    </button>
+            <!-- SIDEBAR: Filters -->
+            <aside class="sidebar" id="sidebarPanel" aria-label="Filters">
+                <div class="sidebar-header">
+                    <h2 class="sidebar-title">Filters</h2>
+                    <button class="sidebar-toggle" id="btnToggleSidebar" title="Collapse sidebar">✕</button>
                 </div>
+                <div class="sidebar-content">
 
-                <!-- Release Year Range -->
-                <div class="filter-group">
-                    <label class="filter-label">RELEASE TIMELINE</label>
-                    <div class="range-inputs">
-                        <input type="date" id="yearMin" class="horror-input date-input">
-                        <span class="range-separator">TO</span>
-                        <input type="date" id="yearMax" class="horror-input date-input">
+                    <!-- Text Search -->
+                    <div class="filter-group">
+                        <label for="searchTitle" class="filter-label">Search</label>
+                        <input type="text" id="searchTitle" class="filter-input" placeholder="Film title...">
+                        <button class="btn btn-search" id="btnSearch">Search Films</button>
                     </div>
-                    <div class="upcoming-wrap" style="margin-top: 10px;">
-                        <label class="genre-checkbox-label" for="upcomingReleases">
+
+                    <!-- Release Date Range -->
+                    <div class="filter-group">
+                        <label class="filter-label">Release Date</label>
+                        <div class="range-inputs">
+                            <input type="date" id="yearMin" class="filter-input date-input">
+                            <span class="range-separator">to</span>
+                            <input type="date" id="yearMax" class="filter-input date-input">
+                        </div>
+                        <label class="checkbox-label" for="upcomingReleases">
                             <input type="checkbox" id="upcomingReleases">
-                            🔮 PREDICT UPCOMING (90 DAYS)
+                            Include unreleased films
                         </label>
                     </div>
-                </div>
 
-                <!-- Minimum Runtime -->
-                <div class="filter-group">
-                    <label for="runtimeMin" class="filter-label">MINIMUM RUNTIME (MINS)</label>
-                    <input type="number" id="runtimeMin" class="horror-input number-input" value="70" min="0" max="300" step="5">
-                </div>
-
-                <!-- Inclusionary Genres -->
-                <div class="filter-group">
-                    <label class="filter-label">COVEN GENRES (INCLUDE)</label>
-                    <div class="genre-selector-container" id="genresIncludeContainer">
-                        <div class="loading-small">Retrieving genres...</div>
+                    <!-- Minimum Runtime -->
+                    <div class="filter-group">
+                        <label for="runtimeMin" class="filter-label">Min. Runtime (mins)</label>
+                        <input type="number" id="runtimeMin" class="filter-input number-input" value="70" min="0" max="300" step="5">
                     </div>
-                </div>
 
-                <!-- Exclusionary Genres -->
-                <div class="filter-group">
-                    <label class="filter-label">BANISHED GENRES (EXCLUDE)</label>
-                    <div class="genre-selector-container" id="genresExcludeContainer">
-                        <div class="loading-small">Retrieving genres...</div>
+                    <!-- Include Genres -->
+                    <div class="filter-group">
+                        <label class="filter-label">Include Genres</label>
+                        <div class="genre-selector-container" id="genresIncludeContainer">
+                            <div class="loading-small">Loading genres...</div>
+                        </div>
                     </div>
-                </div>
 
-                <!-- Actor Search & Filter -->
-                <div class="filter-group">
-                    <label for="actorSearch" class="filter-label">CAST INCLUSION</label>
-                    <div class="search-suggest-wrap">
-                        <input type="text" id="actorSearch" class="horror-input" placeholder="Search actor name...">
-                        <div class="suggestions-dropdown" id="actorSuggestions"></div>
+                    <!-- Exclude Genres -->
+                    <div class="filter-group">
+                        <label class="filter-label">Exclude Genres</label>
+                        <div class="genre-selector-container" id="genresExcludeContainer">
+                            <div class="loading-small">Loading genres...</div>
+                        </div>
                     </div>
-                    <div class="selected-chips" id="actorChips"></div>
-                </div>
 
-                <!-- Director Search & Filter -->
-                <div class="filter-group">
-                    <label for="directorSearch" class="filter-label">DIRECTOR INCLUSION</label>
-                    <div class="search-suggest-wrap">
-                        <input type="text" id="directorSearch" class="horror-input" placeholder="Search director name...">
-                        <div class="suggestions-dropdown" id="directorSuggestions"></div>
+                    <!-- Language -->
+                    <div class="filter-group">
+                        <label for="languageSelect" class="filter-label">Language</label>
+                        <select id="languageSelect" class="filter-input select-input">
+                            <option value="">Any Language</option>
+                            <option value="en" selected>English</option>
+                            <option value="it">Italian</option>
+                            <option value="ja">Japanese</option>
+                            <option value="es">Spanish</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                        </select>
                     </div>
-                    <div class="selected-chips" id="directorChips"></div>
+
                 </div>
-
-
-
-                <!-- Original Language -->
-                <div class="filter-group">
-                    <label for="languageSelect" class="filter-label">ORIGINAL LANGUAGE</label>
-                    <select id="languageSelect" class="horror-input select-input">
-                        <option value="">Any Language</option>
-                        <option value="en" selected>English</option>
-                        <option value="it">Italian (Giallo classics)</option>
-                        <option value="ja">Japanese (J-Horror)</option>
-                        <option value="es">Spanish</option>
-                        <option value="fr">French</option>
-                        <option value="de">German</option>
-                    </select>
-                </div>
-
             </aside>
 
-            <!-- MOVIE GRID: The Projection Slab -->
-            <section class="projection-slab" aria-label="Search Results">
-                <!-- Top action bar with result counts and sort dropdown -->
-                <div class="projection-top-bar" id="projectionTopBar" style="display: none;">
-                    <div class="results-meta" id="resultsCount">0 FILMS DISCOVERED</div>
+            <!-- Sidebar collapsed toggle (visible when sidebar hidden) -->
+            <button class="sidebar-expand" id="btnExpandSidebar" title="Show filters" style="display:none;">☰ Filters</button>
+
+            <!-- MOVIE GRID -->
+            <section class="results-panel" aria-label="Search Results">
+                <!-- Top bar -->
+                <div class="results-top-bar" id="projectionTopBar" style="display: none;">
+                    <div class="results-count" id="resultsCount">0 films found</div>
                     <div class="top-bar-controls">
-                        <label for="sortBySelect" class="top-bar-label">SORT ORDER:</label>
-                        <select id="sortBySelect" class="horror-input select-input top-select">
+                        <label for="sortBySelect" class="top-bar-label">Sort:</label>
+                        <select id="sortBySelect" class="filter-input select-input">
                             <option value="popularity.desc">Most Popular</option>
-                            <option value="primary_release_date.desc" selected>Release Date (Newest first)</option>
-                            <option value="primary_release_date.asc">Release Date (Oldest first)</option>
-                            <option value="vote_average.desc">Rating (Highest first)</option>
+                            <option value="primary_release_date.desc" selected>Newest First</option>
+                            <option value="primary_release_date.asc">Oldest First</option>
+                            <option value="vote_average.desc">Highest Rated</option>
                         </select>
                     </div>
                 </div>
 
-                <!-- Search feedback & pagination -->
-                <div class="slab-status" id="slabStatus">
-                    <p class="status-msg">Awaiting API Key configuration. Click CONFIG above to set up your TMDb Key.</p>
+                <!-- Status -->
+                <div class="results-status" id="slabStatus">
+                    <p class="status-msg">Configure your TMDb API key in Settings to begin.</p>
                 </div>
 
-                <!-- Movies Grid -->
-                <div class="movie-shelf" id="movieShelf">
-                    <!-- Dynamic movie cards will be generated here -->
-                </div>
+                <!-- Movie Grid -->
+                <div class="movie-grid" id="movieShelf"></div>
 
-                <!-- Pagination Footer -->
-                <div class="slab-pagination" id="slabPagination" style="display: none;">
-                    <button class="blood-btn pagination-btn" id="btnPrevPage" disabled>
-                        <span class="btn-text">◀ PREV</span>
-                    </button>
-                    <span class="page-indicator" id="pageIndicator">PAGE 1 OF 1</span>
-                    <button class="blood-btn pagination-btn" id="btnNextPage">
-                        <span class="btn-text">NEXT ▶</span>
-                    </button>
+                <!-- Pagination -->
+                <div class="pagination" id="slabPagination" style="display: none;">
+                    <button class="btn btn-page-arrow" id="btnPrevPage" disabled>◀</button>
+                    <div class="page-numbers" id="pageNumbers"></div>
+                    <button class="btn btn-page-arrow" id="btnNextPage">▶</button>
                 </div>
             </section>
         </main>
-
     </div>
 
-    <!-- MOVIE DETAIL POPUP MODAL (Gothic blood overlay card) -->
+    <!-- MOVIE DETAIL MODAL -->
     <div class="modal-overlay" id="movieDetailModal">
-        <div class="modal-card movie-detail-card">
+        <div class="modal-card detail-card">
             <button class="modal-close" id="btnCloseDetail">&times;</button>
-            <div class="movie-detail-content" id="movieDetailContent">
-                <!-- Populated dynamically via JS -->
-            </div>
+            <div class="modal-body" id="movieDetailContent"></div>
         </div>
     </div>
 
-    <!-- CONFIG MODAL (TMDb Key & Setup Guide & Radarr API config) -->
+    <!-- CONFIG MODAL -->
     <div class="modal-overlay" id="configModal">
-        <div class="modal-card">
+        <div class="modal-card config-card">
             <button class="modal-close" id="btnCloseConfig">&times;</button>
-            <h2 class="modal-title">☠ CONFIGURATION PANEL</h2>
-            <div class="vault-divider"></div>
-            
+            <h2 class="modal-title">Settings</h2>
+
             <div class="modal-body">
-                <!-- TMDb Configuration -->
+                <!-- TMDb -->
                 <div class="config-section">
-                    <h3 class="config-subtitle" style="font-family: var(--font-gothic); color: var(--parchment-gold); font-size: 0.9rem; letter-spacing: 1px; margin-bottom: 5px;">🎥 TMDB API SETTINGS</h3>
-                    <label for="tmdbApiKey" class="filter-label">TMDb API Key (v3 auth)</label>
-                    <input type="password" id="tmdbApiKey" class="horror-input password-input" placeholder="Paste your TMDb API key here...">
-                    <span class="input-hint">Used for client-side search requests. Saved in your local browser storage.</span>
+                    <h3 class="config-heading">TMDb API</h3>
+                    <label for="tmdbApiKey" class="filter-label">API Key (v3)</label>
+                    <input type="password" id="tmdbApiKey" class="filter-input" placeholder="Paste your TMDb API key...">
+                    <span class="input-hint">Stored in browser localStorage.</span>
                 </div>
 
-                <!-- Radarr Direct API Configuration -->
-                <div class="vault-divider" style="margin: 15px 0;"></div>
+                <hr class="config-divider">
+
+                <!-- Radarr -->
                 <div class="config-section">
-                    <h3 class="config-subtitle" style="font-family: var(--font-gothic); color: var(--parchment-gold); font-size: 0.9rem; letter-spacing: 1px; margin-bottom: 5px;">🤖 RADARR API DIRECT CONNECTION</h3>
-                    
-                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <h3 class="config-heading">Radarr Connection</h3>
+                    <div class="config-fields">
                         <div>
-                            <label for="radarrUrl" class="filter-label">Radarr Server URL</label>
-                            <input type="text" id="radarrUrl" class="horror-input" placeholder="http://192.168.1.50:7878" style="width: 100%;">
-                            <span class="input-hint">Your local Radarr URL (visible inside your network or from the container).</span>
+                            <label for="radarrUrl" class="filter-label">Server URL</label>
+                            <input type="text" id="radarrUrl" class="filter-input" placeholder="http://192.168.1.50:7878">
+                            <span class="input-hint">Your Radarr instance URL.</span>
                         </div>
                         <div>
-                            <label for="radarrApiKey" class="filter-label">Radarr API Key</label>
-                            <input type="password" id="radarrApiKey" class="horror-input password-input" placeholder="Paste Radarr API key here..." style="width: 100%;">
-                            <span class="input-hint">Radarr > Settings > General > Security > API Key.</span>
+                            <label for="radarrApiKey" class="filter-label">API Key</label>
+                            <input type="password" id="radarrApiKey" class="filter-input" placeholder="Radarr API key...">
+                            <span class="input-hint">Settings → General → Security → API Key.</span>
                         </div>
                     </div>
+                    <button class="btn btn-connect" id="btnConnectRadarr">Connect to Radarr</button>
+                    <div id="radarrConnectionStatus" class="connection-status">Not connected.</div>
                 </div>
 
-                <div class="radarr-connect-wrap">
-                    <button class="blood-btn" id="btnConnectRadarr" style="width:100%; border-color: var(--neon-crimson); margin-top: 5px;">
-                        <span class="btn-text">🔗 CONNECT & RETRIEVE RADARR PATHS</span>
-                    </button>
-                    <div id="radarrConnectionStatus" class="loading-small" style="margin-top:8px; text-align:center; font-family: var(--font-code);">Not connected.</div>
-                </div>
-
-                <!-- Radarr Dropdowns, shown only if connection is successful -->
-                <div id="radarrPathConfigs" style="display: none; border: 1px dashed var(--border-dim); padding: 15px; border-radius: 2px; background-color: #090808;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div class="filter-group" style="margin-bottom: 0;">
-                            <label for="radarrRootFolder" class="filter-label">Target Root Folder</label>
-                            <select id="radarrRootFolder" class="horror-input select-input" style="width: 100%;">
-                                <!-- Loaded dynamically -->
-                            </select>
+                <!-- Radarr path configs (shown after connect) -->
+                <div id="radarrPathConfigs" class="path-configs" style="display: none;">
+                    <div class="config-fields">
+                        <div>
+                            <label for="radarrRootFolder" class="filter-label">Root Folder</label>
+                            <select id="radarrRootFolder" class="filter-input select-input"></select>
                         </div>
-                        <div class="filter-group" style="margin-bottom: 0;">
+                        <div>
                             <label for="radarrQualityProfile" class="filter-label">Quality Profile</label>
-                            <select id="radarrQualityProfile" class="horror-input select-input" style="width: 100%;">
-                                <!-- Loaded dynamically -->
-                            </select>
+                            <select id="radarrQualityProfile" class="filter-input select-input"></select>
                         </div>
                     </div>
                 </div>
 
-                <!-- Setup Guide instructions -->
-                <div class="vault-divider" style="margin: 15px 0;"></div>
-                <div class="instructions-section">
-                    <h3>💡 How to Hook this into Radarr</h3>
-                    <p>Since Radarr doesn't support raw CSV upload directly, follow these simple and popular methods to auto-import your lists:</p>
-                    
-                    <div class="tab-container">
-                        <div class="tabs">
-                            <button class="tab-link active" data-tab="tabTrakt">Trakt.tv Sync (Free)</button>
-                            <button class="tab-link" data-tab="tabMdb">MDBList Sync</button>
-                            <button class="tab-link" data-tab="tabTmdbList">TMDb List Sync</button>
-                        </div>
+                <hr class="config-divider">
 
-                        <div class="tab-content active" id="tabTrakt">
-                            <ol>
-                                <li>Export your selected movies using the **💾 EXPORT CSV** button.</li>
-                                <li>Go to <a href="https://trakt.tv" target="_blank" rel="noopener">Trakt.tv</a>, create/open a custom list.</li>
-                                <li>Click **Import** and select the exported CSV file.</li>
-                                <li>In Radarr, navigate to **Settings > Import Lists > + (Add) > Trakt List**.</li>
-                                <li>Connect your Trakt account and select your custom list. Radarr will now automatically sync it!</li>
-                            </ol>
+                <!-- Emby -->
+                <div class="config-section">
+                    <h3 class="config-heading">Emby Library</h3>
+                    <div class="config-fields">
+                        <div>
+                            <label for="embyUrl" class="filter-label">Emby Server URL</label>
+                            <input type="text" id="embyUrl" class="filter-input" placeholder="http://192.168.1.50:8096">
+                            <span class="input-hint">Your Emby server URL.</span>
                         </div>
-
-                        <div class="tab-content" id="tabMdb">
-                            <ol>
-                                <li>Export your selected movies using the **💾 EXPORT CSV** button.</li>
-                                <li>Log into <a href="https://mdblist.com" target="_blank" rel="noopener">MDBList</a>, create a custom list.</li>
-                                <li>Upload your exported CSV file.</li>
-                                <li>Copy the generated custom list RSS/URL from MDBList.</li>
-                                <li>In Radarr, go to **Settings > Import Lists > + (Add) > Custom List** and paste the MDBList URL.</li>
-                            </ol>
-                        </div>
-
-                        <div class="tab-content" id="tabTmdbList">
-                            <ol>
-                                <li>Ensure you have a custom list created in your <a href="https://themoviedb.org" target="_blank" rel="noopener">TMDb Profile</a>.</li>
-                                <li>Export the plain text file of TMDb IDs using **📜 EXPORT TXT** and add them to your TMDb list (or we can future-proof it).</li>
-                                <li>In Radarr, go to **Settings > Import Lists > + (Add) > TMDb List**.</li>
-                                <li>Enter your TMDb username and TMDb List ID. Radarr will sync the list directly!</li>
-                            </ol>
+                        <div>
+                            <label for="embyApiKey" class="filter-label">Emby API Key</label>
+                            <input type="password" id="embyApiKey" class="filter-input" placeholder="Emby API key...">
+                            <span class="input-hint">Emby Dashboard → Advanced → API Keys.</span>
                         </div>
                     </div>
+                    <button class="btn btn-connect" id="btnConnectEmby">Connect to Emby</button>
+                    <div id="embyConnectionStatus" class="connection-status">Not connected.</div>
                 </div>
             </div>
 
             <div class="modal-footer">
-                <button class="blood-btn save-btn" id="btnSaveConfig">
-                    <span class="btn-text">🩸 SAVE SETTINGS</span>
-                </button>
+                <button class="btn btn-save" id="btnSaveConfig">Save Settings</button>
             </div>
         </div>
     </div>
-
-    <!-- AUDIO CONTROLS & HELPERS (Optional Horror atmosphere) -->
-    <audio id="soundSlasher" src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==" preload="auto"></audio>
 
     <script src="app.js"></script>
 </body>

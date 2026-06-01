@@ -22,7 +22,9 @@ let appConfig = {
     radarrUrl: '',
     radarrApiKey: '',
     radarrRootFolder: '',
-    radarrQualityProfile: ''
+    radarrQualityProfile: '',
+    embyUrl: '',
+    embyApiKey: ''
 };
 
 // Load saved config on boot if existing
@@ -105,6 +107,46 @@ app.all('/api/radarr/*', async (req, res) => {
     } catch (error) {
         console.error('Radarr Proxy Server Error:', error.message);
         
+        if (error.response) {
+            res.status(error.response.status).json(error.response.data);
+        } else {
+            res.status(500).json({ error: error.message });
+        }
+    }
+});
+
+// Proxy requests to Emby API
+app.all('/api/emby/*', async (req, res) => {
+    try {
+        const embyUrl = req.headers['x-emby-url'] || appConfig.embyUrl;
+        const embyApiKey = req.headers['x-emby-apikey'] || appConfig.embyApiKey;
+
+        if (!embyUrl || !embyApiKey) {
+            return res.status(400).json({ error: 'Emby connection parameters not configured.' });
+        }
+
+        const subPath = req.params[0] || '';
+        const cleanBaseUrl = embyUrl.replace(/\/+$/, '');
+        const targetUrl = `${cleanBaseUrl}/emby/${subPath}`;
+
+        // Forward query params, inject api_key
+        const params = { ...req.query, api_key: embyApiKey };
+
+        const config = {
+            method: req.method,
+            url: targetUrl,
+            headers: { 'Content-Type': 'application/json' },
+            params: params,
+            data: req.body,
+            validateStatus: (status) => status < 400
+        };
+
+        console.log(`[Emby Proxy] Routing ${config.method} -> ${config.url}`);
+        const response = await axios(config);
+        console.log(`[Emby Proxy] Response: Status ${response.status}`);
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error('Emby Proxy Error:', error.message);
         if (error.response) {
             res.status(error.response.status).json(error.response.data);
         } else {
