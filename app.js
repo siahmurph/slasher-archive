@@ -710,6 +710,21 @@ async function triggerSearch() {
     }
 }
 
+// Cross-reference Emby data with Radarr to fill in poster paths and ratings
+function enrichMovieData(movie) {
+    const radarrData = state.radarrMovieData.get(movie.id);
+    if (radarrData) {
+        return {
+            ...movie,
+            poster_path: movie.poster_path || radarrData.poster_path,
+            vote_average: (movie.vote_average && movie.vote_count > 0) ? movie.vote_average : radarrData.vote_average,
+            vote_count: movie.vote_count > 1 ? movie.vote_count : radarrData.vote_count,
+            release_date: movie.release_date || radarrData.release_date
+        };
+    }
+    return movie;
+}
+
 // --- RENDER MOVIE GRID ---
 function renderMovieShelf(movies) {
     state.currentlyRenderedMovies = movies;
@@ -720,7 +735,8 @@ function renderMovieShelf(movies) {
     // For library-only / requested-only, render from cached library data instead
     let moviesToRender;
     if (filterMode === 'library-only') {
-        moviesToRender = [...state.embyMovieData.values()];
+        moviesToRender = [...state.embyMovieData.values()].map(m => enrichMovieData(m));
+        moviesToRender.sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''));
         if (moviesToRender.length === 0) {
             elements.movieShelf.innerHTML = '<div class="status-msg" style="text-align:center;padding:40px;">No Emby library data available. Connect Emby in Settings.</div>';
             return;
@@ -728,6 +744,7 @@ function renderMovieShelf(movies) {
     } else if (filterMode === 'requested-only') {
         // Show radarr movies that are NOT in emby
         moviesToRender = [...state.radarrMovieData.values()].filter(m => !state.embyLibrary.has(m.id));
+        moviesToRender.sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''));
         if (moviesToRender.length === 0) {
             elements.movieShelf.innerHTML = '<div class="status-msg" style="text-align:center;padding:40px;">No pending Radarr requests found.</div>';
             return;
