@@ -23,7 +23,9 @@ const state = {
     moviesOnPage: [],
     currentlyRenderedMovies: [],
     radarrLibrary: new Set(),
+    radarrMovieData: new Map(),
     embyLibrary: new Set(),
+    embyMovieData: new Map(),
 
     radarr: {
         url: '',
@@ -343,8 +345,24 @@ async function syncRadarrLibrary() {
     try {
         const movies = await callRadarrAPI('movie', 'GET');
         state.radarrLibrary.clear();
+        state.radarrMovieData.clear();
         if (Array.isArray(movies)) {
-            movies.forEach(m => { if (m.tmdbId) state.radarrLibrary.add(m.tmdbId); });
+            movies.forEach(m => {
+                if (m.tmdbId) {
+                    state.radarrLibrary.add(m.tmdbId);
+                    const posterImg = m.images?.find(i => i.coverType === 'poster');
+                    const posterPath = posterImg?.remoteUrl?.replace(/https:\/\/image\.tmdb\.org\/t\/p\/original/, '') || null;
+                    state.radarrMovieData.set(m.tmdbId, {
+                        id: m.tmdbId,
+                        title: m.title,
+                        release_date: m.inCinemas || m.digitalRelease || m.physicalRelease || '',
+                        vote_average: m.ratings?.tmdb?.value || 0,
+                        vote_count: m.ratings?.tmdb?.count || 0,
+                        poster_path: posterPath,
+                        overview: m.overview || ''
+                    });
+                }
+            });
         }
         console.log(`Radarr library synced: ${state.radarrLibrary.size} movies.`);
     } catch (err) {
@@ -381,9 +399,22 @@ function initEmbyHandshake() {
 
             if (data && data.Items) {
                 state.embyLibrary.clear();
+                state.embyMovieData.clear();
                 data.Items.forEach(item => {
                     const tmdbId = item.ProviderIds?.Tmdb;
-                    if (tmdbId) state.embyLibrary.add(parseInt(tmdbId));
+                    if (tmdbId) {
+                        const id = parseInt(tmdbId);
+                        state.embyLibrary.add(id);
+                        state.embyMovieData.set(id, {
+                            id: id,
+                            title: item.Name || 'Unknown',
+                            release_date: item.PremiereDate ? item.PremiereDate.split('T')[0] : (item.ProductionYear ? `${item.ProductionYear}-01-01` : ''),
+                            vote_average: item.CommunityRating || 0,
+                            vote_count: 1,
+                            poster_path: null,
+                            overview: item.Overview || ''
+                        });
+                    }
                 });
 
                 state.emby.connected = true;
@@ -619,6 +650,11 @@ async function triggerSearch() {
             if (state.activeFilters.runtimeMin) {
                 url.searchParams.append('with_runtime.gte', state.activeFilters.runtimeMin);
             }
+
+            // When sorting by rating, require a minimum vote count to filter out noise
+            if (state.activeFilters.sortBy === 'vote_average.desc') {
+                url.searchParams.append('vote_count.gte', '50');
+            }
         }
 
         url.searchParams.append('api_key', state.apiKey);
@@ -681,14 +717,31 @@ function renderMovieShelf(movies) {
 
     const filterMode = elements.libraryFilter ? elements.libraryFilter.value : 'all';
 
-    movies.forEach(movie => {
+    // For library-only / requested-only, render from cached library data instead
+    let moviesToRender;
+    if (filterMode === 'library-only') {
+        moviesToRender = [...state.embyMovieData.values()];
+        if (moviesToRender.length === 0) {
+            elements.movieShelf.innerHTML = '<div class="status-msg" style="text-align:center;padding:40px;">No Emby library data available. Connect Emby in Settings.</div>';
+            return;
+        }
+    } else if (filterMode === 'requested-only') {
+        // Show radarr movies that are NOT in emby
+        moviesToRender = [...state.radarrMovieData.values()].filter(m => !state.embyLibrary.has(m.id));
+        if (moviesToRender.length === 0) {
+            elements.movieShelf.innerHTML = '<div class="status-msg" style="text-align:center;padding:40px;">No pending Radarr requests found.</div>';
+            return;
+        }
+    } else {
+        moviesToRender = movies;
+    }
+
+    moviesToRender.forEach(movie => {
         const inEmby = state.emby.connected && state.embyLibrary.has(movie.id);
         const inRadarr = state.radarr.connected && state.radarrLibrary.has(movie.id);
 
-        // Apply library filter
+        // Apply hide-library filter
         if (filterMode === 'hide-library' && inEmby) return;
-        if (filterMode === 'library-only' && !inEmby) return;
-        if (filterMode === 'requested-only' && !inRadarr) return;
 
         const card = document.createElement('div');
         let statusClass = '';
