@@ -895,7 +895,9 @@ async function triggerSearch() {
 
         const include = genreIds('include');
         const exclude = genreIds('exclude');
-        if (include.length) params.with_genres = include.join(',');
+        // Pipe is OR in TMDb, comma is AND. OR is what you want for browsing:
+        // "Horror, Thriller, Mystery" should mean any of them, not all three.
+        if (include.length) params.with_genres = include.join('|');
         if (exclude.length) params.without_genres = exclude.join(',');
 
         if (state.activeFilters.yearMin) {
@@ -1053,8 +1055,8 @@ function matchesLibraryFilters(movie, includeNames, excludeNames) {
 
     if (includeNames.length || excludeNames.length) {
         const own = (movie.genres || []).map((g) => String(g).toLowerCase());
-        // Include is AND, matching TMDb's comma semantics in discover.
-        if (includeNames.length && !includeNames.every((n) => own.includes(n))) return false;
+        // OR, matching the pipe-joined with_genres used for discover above.
+        if (includeNames.length && !includeNames.some((n) => own.includes(n))) return false;
         if (excludeNames.some((n) => own.includes(n))) return false;
     }
     return true;

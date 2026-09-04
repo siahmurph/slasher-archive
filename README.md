@@ -13,6 +13,8 @@ in **Radarr**, and push new films straight into Radarr in one click.
 - **Discovery filters** — text search, release-date range, minimum runtime,
   minimum vote count, original language, and tri-state genre chips (click once
   to include, again to exclude, again to clear; **Apply** commits them).
+  Included genres match **any** of the selection, excluded genres remove a film
+  outright.
   The vote-count floor is what keeps obscure never-distributed titles out —
   they carry real release dates and runtimes, so no other filter catches them.
 - **Library awareness** — connect Emby and Radarr and every card is labelled
