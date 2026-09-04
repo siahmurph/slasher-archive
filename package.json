@@ -1,6 +1,6 @@
 {
   "name": "slasher-archive",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "description": "Horror film discovery engine with Radarr and Emby integration",
   "main": "server.js",
   "private": true,

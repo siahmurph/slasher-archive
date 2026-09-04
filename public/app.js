@@ -534,17 +534,45 @@ async function connectRadarr({ silent = false } = {}) {
             label: p.name
         }));
 
-        if (state.radarr.rootFolder) elements.radarrRootFolder.value = state.radarr.rootFolder;
-        if (state.radarr.qualityProfile) elements.radarrQualityProfile.value = state.radarr.qualityProfile;
+        const savedRoot = state.radarr.rootFolder;
+        const savedProfile = state.radarr.qualityProfile;
+
+        // Assigning a value a <select> does not contain is a silent no-op, which
+        // is how a profile deleted or renumbered in Radarr used to leave the
+        // dropdown quietly sitting on its first entry — usually "Any".
+        if (savedRoot) elements.radarrRootFolder.value = savedRoot;
+        if (savedProfile) elements.radarrQualityProfile.value = savedProfile;
+        const rootGone = Boolean(savedRoot) && elements.radarrRootFolder.value !== savedRoot;
+        const profileGone = Boolean(savedProfile) && elements.radarrQualityProfile.value !== savedProfile;
+
         // Fall back to the first option so an import can never post an empty path.
         if (!elements.radarrRootFolder.value) elements.radarrRootFolder.selectedIndex = 0;
         if (!elements.radarrQualityProfile.value) elements.radarrQualityProfile.selectedIndex = 0;
         state.radarr.rootFolder = elements.radarrRootFolder.value;
         state.radarr.qualityProfile = elements.radarrQualityProfile.value;
 
+        // Persist whatever was resolved. Without this a first connect leaves the
+        // stored profile empty, so every add silently used Radarr's first
+        // profile while Settings looked like it had a real selection.
+        if (state.radarr.rootFolder !== savedRoot || state.radarr.qualityProfile !== savedProfile) {
+            await postConfig({
+                radarrRootFolder: state.radarr.rootFolder,
+                radarrQualityProfile: state.radarr.qualityProfile
+            });
+        }
+
         elements.radarrPathConfigs.hidden = false;
         state.radarr.connected = true;
-        setStatusLine(elements.radarrConnectionStatus, 'Connected to Radarr.', 'ok');
+
+        const profileName = activeProfileName();
+        if (profileGone || rootGone) {
+            setStatusLine(elements.radarrConnectionStatus,
+                `Connected, but the saved ${profileGone ? 'quality profile' : 'root folder'} no longer exists in Radarr. `
+                + `Now using “${profileName}” into ${state.radarr.rootFolder} — change it below if that is wrong.`, 'warn');
+        } else {
+            setStatusLine(elements.radarrConnectionStatus,
+                `Connected — adding as “${profileName}” into ${state.radarr.rootFolder}.`, 'ok');
+        }
 
         await syncRadarrLibrary();
         rerenderCurrentResults();
@@ -555,6 +583,13 @@ async function connectRadarr({ silent = false } = {}) {
         setStatusLine(elements.radarrConnectionStatus, err.message, 'error');
         if (!silent) elements.radarrConnectionStatus.scrollIntoView({ block: 'nearest' });
     }
+}
+
+// Label of the profile an import would currently use.
+function activeProfileName() {
+    return elements.radarrQualityProfile.selectedOptions?.[0]?.textContent
+        || elements.radarrQualityProfile.value
+        || 'unknown profile';
 }
 
 function populateSelect(select, items, mapper) {
@@ -844,6 +879,19 @@ function initFilters() {
     });
 
     elements.btnApplyGenres.addEventListener('click', runSearch);
+
+    // Persist immediately: these two decide what an import actually does, and
+    // relying on a separate Save is how the wrong profile got used silently.
+    elements.radarrQualityProfile.addEventListener('change', async (e) => {
+        state.radarr.qualityProfile = e.target.value;
+        await postConfig({ radarrQualityProfile: state.radarr.qualityProfile }).catch(() => {});
+        setStatusLine(elements.radarrConnectionStatus,
+            `Connected — adding as “${activeProfileName()}” into ${state.radarr.rootFolder}.`, 'ok');
+    });
+    elements.radarrRootFolder.addEventListener('change', async (e) => {
+        state.radarr.rootFolder = e.target.value;
+        await postConfig({ radarrRootFolder: state.radarr.rootFolder }).catch(() => {});
+    });
 
     elements.btnToggleHidden.addEventListener('click', () => {
         state.showHidden = !state.showHidden;
@@ -1449,7 +1497,9 @@ async function loadMovieDetailPopup(movieSummary) {
         } else if (inRadarr) {
             actionHTML = '<div class="status-badge status-pending">Requested in Radarr</div>';
         } else if (state.radarr.connected) {
-            actionHTML = '<button class="btn btn-primary" id="btnRadarrImportNow" type="button">Add to Radarr</button>';
+            actionHTML = '<button class="btn btn-primary" id="btnRadarrImportNow" type="button">Add to Radarr</button>'
+                + `<div class="detail-hint">Adds as <strong>${esc(activeProfileName())}</strong>`
+                + ` into <strong>${esc(state.radarr.rootFolder)}</strong>.</div>`;
         } else {
             actionHTML = '<div class="detail-hint">Connect Radarr in Settings for one-click import.</div>';
         }

@@ -1114,6 +1114,7 @@ img {
 
 .connection-status[data-tone="ok"] { color: var(--status-library); }
 .connection-status[data-tone="error"] { color: var(--accent); }
+.connection-status[data-tone="warn"] { color: var(--status-requested); }
 .connection-status[data-tone="muted"] { color: var(--text-muted); }
 
 .path-configs {
