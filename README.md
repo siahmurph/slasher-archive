@@ -81,7 +81,7 @@ source instead, replace the `image:` line with `build: .`.
 ```yaml
 services:
   slasher-archive:
-    image: ghcr.io/siahmurph/slasher-archive:2.0.4
+    image: ghcr.io/siahmurph/slasher-archive:2.0.5
     container_name: slasher-archive
     restart: unless-stopped
     ports:
