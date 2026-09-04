@@ -253,6 +253,41 @@ app.get('/api/tmdb/*', async (req, res) => {
    request header would turn this into an open SSRF proxy into the LAN.
    ---------------------------------------------------- */
 
+const REDIRECT_CODES = [301, 302, 303, 307, 308];
+const MAX_REDIRECTS = 3;
+
+/* Follows redirects by hand, preserving the original method.
+
+   axios's own redirect following downgrades POST to GET on 301/302, which would
+   silently turn "add this movie" into "list movies". So maxRedirects is 0 and
+   the hops are done here.
+
+   validateStatus must stop BELOW 300: if 3xx counted as success, the redirect
+   would be handed back to the browser untouched — which is exactly what a
+   reverse proxy in front of Radarr (http -> https) turns into a visible 301. */
+async function requestUpstream(config, label) {
+    let current = { ...config, maxRedirects: 0, validateStatus: (status) => status < 300 };
+
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+        try {
+            return await axios(current);
+        } catch (error) {
+            const status = error.response?.status;
+            const location = error.response?.headers?.location;
+            if (!REDIRECT_CODES.includes(status) || !location || hop === MAX_REDIRECTS) throw error;
+
+            // Location may be relative ("/api/v3/movie"), so resolve it.
+            const next = new URL(location, current.url).toString();
+            console.log(`[${label} Proxy] ${status} -> ${next} (preserving ${current.method})`);
+
+            // The query is already baked into the redirect target; re-sending
+            // params would duplicate it.
+            current = { ...current, url: next, params: undefined };
+        }
+    }
+    throw new Error(`${label}: too many redirects`);
+}
+
 app.all('/api/radarr/*', async (req, res) => {
     const baseUrl = normaliseBaseUrl(appConfig.radarrUrl);
     const apiKey = appConfig.radarrApiKey;
@@ -261,40 +296,20 @@ app.all('/api/radarr/*', async (req, res) => {
         return res.status(400).json({ error: 'Radarr is not configured. Open Settings and connect.' });
     }
 
-    const subPath = req.params[0] || '';
-    const targetUrl = `${baseUrl}/api/v3/${subPath}`;
-
-    const requestConfig = {
-        method: req.method,
-        url: targetUrl,
-        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-        params: req.query,
-        data: req.body,
-        timeout: UPSTREAM_TIMEOUT_MS,
-        // Do not let axios auto-follow: it downgrades POST to GET on 301/302.
-        maxRedirects: 0,
-        validateStatus: (status) => status < 400
-    };
+    const targetUrl = `${baseUrl}/api/v3/${req.params[0] || ''}`;
 
     try {
         console.log(`[Radarr Proxy] ${req.method} -> ${targetUrl}`);
-        const response = await axios(requestConfig);
+        const response = await requestUpstream({
+            method: req.method,
+            url: targetUrl,
+            headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+            params: req.query,
+            data: req.body,
+            timeout: UPSTREAM_TIMEOUT_MS
+        }, 'Radarr');
         res.status(response.status).json(response.data ?? {});
     } catch (error) {
-        // A redirect surfaces here as an error because validateStatus rejects 3xx.
-        // Re-issue once against Location, preserving the original method.
-        const status = error.response?.status;
-        const location = error.response?.headers?.location;
-
-        if ([301, 302, 307, 308].includes(status) && location) {
-            try {
-                console.log(`[Radarr Proxy] Following ${status} -> ${location} (preserving ${req.method})`);
-                const redirected = await axios({ ...requestConfig, url: location, params: undefined });
-                return res.status(redirected.status).json(redirected.data ?? {});
-            } catch (redirectError) {
-                return sendProxyError(res, redirectError, 'Radarr');
-            }
-        }
         sendProxyError(res, error, 'Radarr');
     }
 });
@@ -314,15 +329,14 @@ app.get('/api/emby/image/:itemId', async (req, res) => {
     }
 
     try {
-        const upstream = await axios({
+        const upstream = await requestUpstream({
             method: 'GET',
             url: `${baseUrl}/emby/Items/${req.params.itemId}/Images/Primary`,
             params: { maxWidth: 400, quality: 90 },
             headers: { 'X-Emby-Token': apiKey },
             responseType: 'stream',
-            timeout: UPSTREAM_TIMEOUT_MS,
-            validateStatus: (status) => status < 400
-        });
+            timeout: UPSTREAM_TIMEOUT_MS
+        }, 'EmbyImage');
 
         res.set('Content-Type', upstream.headers['content-type'] || 'image/jpeg');
         res.set('Cache-Control', 'public, max-age=86400');
@@ -350,16 +364,15 @@ app.all('/api/emby/*', async (req, res) => {
 
     try {
         console.log(`[Emby Proxy] ${req.method} -> ${baseUrl}/emby/${subPath}`);
-        const response = await axios({
+        const response = await requestUpstream({
             method: req.method,
             url: `${baseUrl}/emby/${subPath}`,
             // Emby takes the key as a header so it stays out of upstream access logs.
             headers: { 'X-Emby-Token': apiKey, 'Content-Type': 'application/json' },
             params: req.query,
             data: req.body,
-            timeout: UPSTREAM_TIMEOUT_MS,
-            validateStatus: (status) => status < 400
-        });
+            timeout: UPSTREAM_TIMEOUT_MS
+        }, 'Emby');
         res.status(response.status).json(response.data ?? {});
     } catch (error) {
         sendProxyError(res, error, 'Emby');
@@ -368,6 +381,17 @@ app.all('/api/emby/*', async (req, res) => {
 
 function sendProxyError(res, error, label) {
     console.error(`[${label} Proxy] ${error.message}`);
+
+    // Checked before the generic error.response branch below, which would
+    // otherwise pass the bare 3xx straight through to the browser.
+    if (REDIRECT_CODES.includes(error.response?.status)) {
+        const target = error.response?.headers?.location;
+        return res.status(502).json({
+            error: `${label} kept redirecting${target ? ` (last hop: ${target})` : ''}. `
+                + 'Check the server URL in Settings — if it sits behind a reverse proxy '
+                + 'that forces HTTPS, enter the https:// URL rather than a bare hostname.'
+        });
+    }
     if (error.response) {
         const body = error.response.data;
         const message =
