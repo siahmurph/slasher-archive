@@ -11,15 +11,20 @@ in **Radarr**, and push new films straight into Radarr in one click.
 ## Features
 
 - **Discovery filters** — text search, release-date range, minimum runtime,
-  original language, and tri-state genre chips (click once to include, again to
-  exclude, again to clear).
+  minimum vote count, original language, and tri-state genre chips (click once
+  to include, again to exclude, again to clear; **Apply** commits them).
+  The vote-count floor is what keeps obscure never-distributed titles out —
+  they carry real release dates and runtimes, so no other filter catches them.
 - **Library awareness** — connect Emby and Radarr and every card is labelled
   *In Library* or *Requested*. Filter to hide what you already have.
 - **One-click Radarr import** — pick a root folder and quality profile once,
   then add films from the detail view with a search triggered automatically.
-- **Filters persist** across reloads; sidebar state and view preferences are
+- **Hide films** you never want to see again, with a toggle to reveal and
+  unhide them.
+- **Filters persist** across reloads; sidebar state, hidden films and theme are
   remembered per browser.
-- **Light and dark themes**, following your OS preference.
+- **Light and dark themes** — follows your OS by default, with an Auto /
+  Light / Dark toggle in the header.
 
 ---
 
@@ -123,6 +128,20 @@ git tag -a v2.1.0 -m "v2.1.0" && git push origin v2.1.0
 >    and Emby keys were reachable at `/config/config.json` by anyone who could
 >    load the page. **Rotate all three keys after upgrading.**
 
+### Config directory permissions
+
+The container runs as uid **1000** (`node`), not root. A bind mount keeps the
+host's ownership, so a `root`-owned directory leaves settings unsaveable with
+`EACCES: permission denied`. Once, on the Docker host:
+
+```bash
+chown -R 1000:1000 /opt/appdata/slasher-archive
+```
+
+Existing files are preserved. The server checks this at startup and prints the
+exact command if the directory is not writable; `GET /healthz` reports it as
+`configWritable`.
+
 ---
 
 ## Connecting the services
@@ -149,6 +168,7 @@ films you already own.
 | `DELETE /api/config/:key` | Clear one stored secret |
 | `GET /api/tmdb/*` | Cached TMDb proxy, restricted to an endpoint allowlist |
 | `ALL /api/radarr/*` | Radarr v3 proxy, target read from server config only |
+| `GET /api/emby/image/:id` | Streams artwork straight from Emby for library views |
 | `ALL /api/emby/*` | Emby proxy, target read from server config only |
 
 ---

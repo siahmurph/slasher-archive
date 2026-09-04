@@ -10,6 +10,14 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <script>
+        // Inline and synchronous on purpose: applying the stored theme after
+        // app.js loads would flash the wrong palette on every page load.
+        try {
+            var t = localStorage.getItem('slasher_theme');
+            if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+        } catch (e) { /* private mode — fall back to the system preference */ }
+    </script>
 </head>
 <body>
     <div class="app-container">
@@ -19,6 +27,7 @@
                 <h1 class="header-title" id="mainTitle">Slasher Archive</h1>
             </div>
             <div class="header-controls">
+                <button class="btn btn-config" id="btnTheme" type="button" title="Switch theme">Theme</button>
                 <button class="btn btn-config" id="btnOpenConfig" type="button" title="Configure API keys and settings">
                     Settings
                 </button>
@@ -55,14 +64,26 @@
                     </div>
 
                     <div class="filter-group">
-                        <label for="runtimeMin" class="filter-label">Min. Runtime (mins)</label>
-                        <input type="number" id="runtimeMin" class="filter-input number-input" value="70" min="0" max="300" step="5">
+                        <div class="dual-inputs">
+                            <div>
+                                <label for="runtimeMin" class="filter-label">Min. Runtime</label>
+                                <input type="number" id="runtimeMin" class="filter-input number-input" value="70" min="0" max="300" step="5">
+                            </div>
+                            <div>
+                                <label for="voteCountMin" class="filter-label">Min. Votes</label>
+                                <input type="number" id="voteCountMin" class="filter-input number-input" value="25" min="0" max="5000" step="5">
+                            </div>
+                        </div>
+                        <span class="input-hint">Min. votes drops obscure titles that have almost no ratings. Set to 0 to see everything.</span>
                     </div>
 
                     <div class="filter-group">
                         <div class="filter-label-row">
                             <span class="filter-label">Genres</span>
-                            <button class="btn-clear" id="btnClearGenres" type="button" title="Clear all genre filters">Clear</button>
+                            <div class="filter-label-actions">
+                                <button class="btn-clear" id="btnClearGenres" type="button" title="Clear all genre filters">Clear</button>
+                                <button class="btn-clear btn-apply" id="btnApplyGenres" type="button" title="Apply genre selection" disabled>Apply</button>
+                            </div>
                         </div>
                         <div class="genre-chips" id="genreChips" role="group" aria-label="Genre filters">
                             <div class="loading-small">Loading genres…</div>
@@ -86,7 +107,7 @@
 
             <button class="sidebar-expand" id="btnExpandSidebar" type="button" title="Show filters" hidden>Filters</button>
 
-            <section class="results-panel" aria-label="Search results">
+            <section class="results-panel" id="resultsPanel" aria-label="Search results">
                 <div class="results-top-bar" id="projectionTopBar" hidden>
                     <div class="top-bar-controls">
                         <label for="libraryFilter" class="top-bar-label">Show</label>
@@ -96,6 +117,7 @@
                             <option value="library-only">In Emby library</option>
                             <option value="requested-only">Requested, not yet in library</option>
                         </select>
+                        <button class="btn-toggle" id="btnToggleHidden" type="button" aria-pressed="false" hidden>Hidden</button>
                     </div>
                     <div class="results-count" id="resultsCount" aria-live="polite"></div>
                     <div class="top-bar-controls">

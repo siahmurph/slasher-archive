@@ -70,6 +70,36 @@ function saveConfigToDisk() {
     fs.renameSync(tmp, configPath);
 }
 
+// The container runs as a non-root user, but a bind-mounted config directory
+// keeps the host's ownership — so the image's own chown does not apply. Probe
+// once at boot and say exactly how to fix it, rather than failing on every save.
+let configWritable = false;
+
+function checkConfigWritable() {
+    const probe = path.join(configDir, '.write-probe');
+    try {
+        fs.writeFileSync(probe, 'ok');
+        fs.unlinkSync(probe);
+        configWritable = true;
+    } catch (err) {
+        configWritable = false;
+        const uid = typeof process.getuid === 'function' ? process.getuid() : null;
+        const gid = typeof process.getgid === 'function' ? process.getgid() : null;
+        console.error('');
+        console.error('  CONFIG DIRECTORY IS NOT WRITABLE');
+        console.error(`  ${configDir} (${err.code || err.message})`);
+        console.error(`  This process runs as uid=${uid ?? '?'} gid=${gid ?? '?'}.`);
+        console.error('  Settings cannot be saved until this is fixed.');
+        if (uid !== null) {
+            console.error('  On the Docker host, chown the directory you mounted here:');
+            console.error(`      chown -R ${uid}:${gid} /path/to/appdata/slasher-archive`);
+            console.error('  then restart the container.');
+        }
+        console.error('');
+    }
+    return configWritable;
+}
+
 // Normalise a user-entered host into an absolute http(s) URL with no trailing slash.
 function normaliseBaseUrl(value) {
     const trimmed = (value || '').trim();
@@ -108,10 +138,21 @@ app.post('/api/config', (req, res) => {
             appConfig[key] = key.endsWith('Url') ? normaliseBaseUrl(value) : value.trim();
         }
         saveConfigToDisk();
+        configWritable = true;
         console.log('Persistent settings updated on disk.');
         res.json({ success: true });
     } catch (err) {
         console.error('Failed saving config to disk:', err.message);
+        if (err.code === 'EACCES' || err.code === 'EPERM') {
+            const uid = typeof process.getuid === 'function' ? process.getuid() : '?';
+            const gid = typeof process.getgid === 'function' ? process.getgid() : '?';
+            configWritable = false;
+            return res.status(500).json({
+                error: `The config directory is not writable by this container (uid ${uid}). `
+                    + `On the Docker host run: chown -R ${uid}:${gid} <the directory mounted at ${configDir}> `
+                    + 'and restart the container.'
+            });
+        }
         res.status(500).json({ error: 'Failed saving configuration on the server filesystem.' });
     }
 });
@@ -258,6 +299,45 @@ app.all('/api/radarr/*', async (req, res) => {
     }
 });
 
+// Emby already holds artwork for everything in the library, so library views
+// can use it directly instead of round-tripping to TMDb for each film.
+// Registered before the generic handler below, which would otherwise swallow it.
+app.get('/api/emby/image/:itemId', async (req, res) => {
+    const baseUrl = normaliseBaseUrl(appConfig.embyUrl);
+    const apiKey = appConfig.embyApiKey;
+
+    if (!baseUrl || !apiKey) {
+        return res.status(400).json({ error: 'Emby is not configured.' });
+    }
+    if (!/^[A-Za-z0-9-]{1,64}$/.test(req.params.itemId)) {
+        return res.status(400).json({ error: 'Invalid Emby item id.' });
+    }
+
+    try {
+        const upstream = await axios({
+            method: 'GET',
+            url: `${baseUrl}/emby/Items/${req.params.itemId}/Images/Primary`,
+            params: { maxWidth: 400, quality: 90 },
+            headers: { 'X-Emby-Token': apiKey },
+            responseType: 'stream',
+            timeout: UPSTREAM_TIMEOUT_MS,
+            validateStatus: (status) => status < 400
+        });
+
+        res.set('Content-Type', upstream.headers['content-type'] || 'image/jpeg');
+        res.set('Cache-Control', 'public, max-age=86400');
+
+        // Once piping starts the headers are already sent, so a mid-stream
+        // failure can only be handled by tearing the response down.
+        upstream.data.on('error', () => res.destroy());
+        upstream.data.pipe(res);
+    } catch (error) {
+        // 404 rather than 502: the client treats "no Emby art" as a cue to fall
+        // back to a TMDb lookup, which is a normal outcome, not an error.
+        res.status(404).json({ error: 'No Emby artwork for this item.' });
+    }
+});
+
 app.all('/api/emby/*', async (req, res) => {
     const baseUrl = normaliseBaseUrl(appConfig.embyUrl);
     const apiKey = appConfig.embyApiKey;
@@ -308,6 +388,7 @@ function sendProxyError(res, error, label) {
 app.get('/healthz', (req, res) => {
     res.json({
         ok: true,
+        configWritable,
         tmdb: Boolean(appConfig.tmdbApiKey),
         radarr: Boolean(appConfig.radarrUrl && appConfig.radarrApiKey),
         emby: Boolean(appConfig.embyUrl && appConfig.embyApiKey),
@@ -330,4 +411,5 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => {
     console.log(`Slasher Archive listening on port ${PORT}`);
     console.log(`Config directory: ${configDir}`);
+    checkConfigWritable();
 });

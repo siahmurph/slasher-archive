@@ -6,6 +6,15 @@
 
 const DEFAULT_INCLUDE_GENRES = [27, 53, 9648]; // Horror, Thriller, Mystery
 const FILTERS_STORAGE_KEY = 'slasher_filters_v2';
+const POSTER_CACHE_KEY = 'slasher_poster_cache_v1';
+const POSTER_CACHE_MAX = 2000;
+// Library views come from one big cached list rather than a paged API, so they
+// are paged here — otherwise a few thousand cards land in the DOM at once.
+const LIBRARY_PAGE_SIZE = 60;
+const HIDDEN_STORAGE_KEY = 'slasher_hidden_v1';
+const THEME_STORAGE_KEY = 'slasher_theme';
+// 'system' follows prefers-color-scheme; the other two override it.
+const THEME_ORDER = ['system', 'light', 'dark'];
 const SIDEBAR_STORAGE_KEY = 'slasher_sidebar_collapsed';
 const MOBILE_BREAKPOINT = 768;
 
@@ -19,6 +28,7 @@ const state = {
         yearMin: '',
         yearMax: '',
         runtimeMin: '70',
+        voteCountMin: '25',
         language: 'en',
         includeUnreleased: false,
         sortBy: 'primary_release_date.desc'
@@ -32,6 +42,9 @@ const state = {
     embyLibrary: new Set(),
     embyMovieData: new Map(),
     posterCache: new Map(),
+    // TMDb ids the user has dismissed. Per-browser, like the other view state.
+    hiddenIds: new Set(),
+    showHidden: false,
     radarr: { url: '', rootFolder: '', qualityProfile: '', connected: false, keySet: false },
     emby: { url: '', connected: false, keySet: false },
     searchController: null
@@ -39,11 +52,11 @@ const state = {
 
 const elements = {};
 [
-    'mainTitle', 'btnOpenConfig', 'sidebarPanel', 'btnToggleSidebar', 'btnExpandSidebar',
+    'mainTitle', 'btnOpenConfig', 'btnTheme', 'sidebarPanel', 'btnToggleSidebar', 'btnExpandSidebar',
     'sidebarBackdrop', 'searchTitle', 'yearMin', 'yearMax', 'upcomingReleases',
-    'genreChips', 'runtimeMin', 'englishOnly', 'btnSearch', 'btnClearGenres',
-    'projectionTopBar', 'resultsCount', 'sortBySelect', 'libraryFilter',
-    'slabStatus', 'movieShelf', 'slabPagination', 'btnPrevPage', 'btnNextPage', 'pageNumbers',
+    'genreChips', 'runtimeMin', 'voteCountMin', 'englishOnly', 'btnSearch', 'btnClearGenres', 'btnApplyGenres',
+    'projectionTopBar', 'resultsCount', 'sortBySelect', 'libraryFilter', 'btnToggleHidden',
+    'resultsPanel', 'slabStatus', 'movieShelf', 'slabPagination', 'btnPrevPage', 'btnNextPage', 'pageNumbers',
     'configModal', 'btnCloseConfig', 'tmdbApiKey', 'btnSaveConfig',
     'radarrUrl', 'radarrApiKey', 'btnConnectRadarr', 'radarrConnectionStatus',
     'radarrPathConfigs', 'radarrRootFolder', 'radarrQualityProfile',
@@ -102,6 +115,9 @@ function isMobile() {
    ---------------------------------------------------- */
 
 window.addEventListener('DOMContentLoaded', async () => {
+    initTheme();
+    loadHidden();
+    loadPosterCache();
     restoreFilters();
     initModals();
     initFilters();
@@ -178,6 +194,7 @@ function restoreFilters() {
             yearMin: saved.yearMin || '',
             yearMax: saved.yearMax || '',
             runtimeMin: saved.runtimeMin ?? '70',
+            voteCountMin: saved.voteCountMin ?? '25',
             language: saved.language ?? 'en',
             includeUnreleased: Boolean(saved.includeUnreleased),
             sortBy: saved.sortBy || 'primary_release_date.desc'
@@ -194,6 +211,7 @@ function restoreFilters() {
     elements.yearMin.value = state.activeFilters.yearMin;
     elements.yearMax.value = state.activeFilters.yearMax;
     elements.runtimeMin.value = state.activeFilters.runtimeMin;
+    elements.voteCountMin.value = state.activeFilters.voteCountMin;
     elements.englishOnly.checked = state.activeFilters.language === 'en';
     elements.upcomingReleases.checked = state.activeFilters.includeUnreleased;
     elements.sortBySelect.value = state.activeFilters.sortBy;
@@ -211,6 +229,91 @@ function persistFilters() {
     } catch (err) {
         /* localStorage can be unavailable in private mode; filters just won't persist. */
     }
+}
+
+/* ----------------------------------------------------
+   THEME
+   ---------------------------------------------------- */
+
+function currentTheme() {
+    try {
+        const stored = localStorage.getItem(THEME_STORAGE_KEY);
+        if (THEME_ORDER.includes(stored)) return stored;
+    } catch (err) { /* fall through */ }
+    return 'system';
+}
+
+function applyTheme(mode) {
+    if (mode === 'system') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', mode);
+
+    try {
+        if (mode === 'system') localStorage.removeItem(THEME_STORAGE_KEY);
+        else localStorage.setItem(THEME_STORAGE_KEY, mode);
+    } catch (err) { /* private mode — the choice just won't persist */ }
+
+    const label = { system: 'Auto', light: 'Light', dark: 'Dark' }[mode];
+    const icon = { system: '◐', light: '☀', dark: '☾' }[mode];
+    elements.btnTheme.textContent = `${icon} ${label}`;
+    elements.btnTheme.title = `Theme: ${label} — click to switch`;
+    elements.btnTheme.setAttribute('aria-label', `Theme: ${label}. Click to switch.`);
+}
+
+function initTheme() {
+    applyTheme(currentTheme());
+    elements.btnTheme.addEventListener('click', () => {
+        const next = THEME_ORDER[(THEME_ORDER.indexOf(currentTheme()) + 1) % THEME_ORDER.length];
+        applyTheme(next);
+    });
+}
+
+/* ----------------------------------------------------
+   HIDDEN FILMS
+   ---------------------------------------------------- */
+
+function loadHidden() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(HIDDEN_STORAGE_KEY) || '[]');
+        if (Array.isArray(raw)) state.hiddenIds = new Set(raw.map(Number).filter(Number.isInteger));
+    } catch (err) {
+        state.hiddenIds = new Set();
+    }
+}
+
+function saveHidden() {
+    try {
+        localStorage.setItem(HIDDEN_STORAGE_KEY, JSON.stringify([...state.hiddenIds]));
+    } catch (err) {
+        /* Private mode — hides just won't survive the session. */
+    }
+}
+
+function setHidden(id, hidden) {
+    if (hidden) state.hiddenIds.add(id);
+    else state.hiddenIds.delete(id);
+    saveHidden();
+    updateHiddenToggle();
+    renderMovieShelf(state.currentlyRenderedMovies);
+}
+
+function updateHiddenToggle() {
+    const count = state.hiddenIds.size;
+    const btn = elements.btnToggleHidden;
+    if (!btn) return;
+    btn.hidden = count === 0;
+    btn.textContent = state.showHidden ? `Hiding ${count}` : `Hidden ${count}`;
+    btn.classList.toggle('is-active', state.showHidden);
+    btn.setAttribute('aria-pressed', String(state.showHidden));
+    btn.title = state.showHidden
+        ? 'Currently showing hidden films — click to hide them again'
+        : `${count} film${count === 1 ? '' : 's'} hidden — click to reveal and unhide`;
+}
+
+// Hidden films drop out of every view unless the toggle is on, in which case
+// they stay visible but dimmed so they can be put back.
+function filterHidden(list) {
+    if (state.showHidden || state.hiddenIds.size === 0) return list;
+    return list.filter((m) => !state.hiddenIds.has(m.id));
 }
 
 /* ----------------------------------------------------
@@ -493,6 +596,8 @@ async function syncRadarrLibrary() {
                 vote_count: m.ratings?.tmdb?.count || 0,
                 poster_path: tmdbPathFromRemoteUrl(poster?.remoteUrl),
                 overview: m.overview || '',
+                genres: Array.isArray(m.genres) ? m.genres : [],
+                runtime: m.runtime || null,
                 hasFile: Boolean(m.hasFile)
             });
         });
@@ -539,7 +644,7 @@ async function connectEmby({ silent = false } = {}) {
             const params = new URLSearchParams({
                 IncludeItemTypes: 'Movie',
                 Recursive: 'true',
-                Fields: 'ProviderIds,ProductionYear,PremiereDate',
+                Fields: 'ProviderIds,ProductionYear,PremiereDate,Genres,RunTimeTicks',
                 StartIndex: String(startIndex),
                 Limit: String(pageSize)
             });
@@ -554,6 +659,8 @@ async function connectEmby({ silent = false } = {}) {
                 state.embyLibrary.add(id);
                 state.embyMovieData.set(id, {
                     id,
+                    // Needed to fetch artwork straight from Emby.
+                    embyItemId: item.Id || null,
                     title: item.Name || 'Unknown',
                     release_date: item.PremiereDate
                         ? item.PremiereDate.split('T')[0]
@@ -561,7 +668,10 @@ async function connectEmby({ silent = false } = {}) {
                     vote_average: item.CommunityRating || 0,
                     vote_count: item.CommunityRating ? 1 : 0,
                     poster_path: null,
-                    overview: item.Overview || ''
+                    overview: item.Overview || '',
+                    genres: Array.isArray(item.Genres) ? item.Genres : [],
+                    // Emby ticks are 100-nanosecond units.
+                    runtime: item.RunTimeTicks ? Math.round(item.RunTimeTicks / 600000000) : null
                 });
             });
 
@@ -629,6 +739,7 @@ function cycleGenre(genreId, chip) {
     chip.dataset.mode = next;
     chip.setAttribute('aria-pressed', String(next !== 'neutral'));
     persistFilters();
+    setGenresDirty(true);
 }
 
 function genreIds(mode) {
@@ -641,16 +752,36 @@ function genreIds(mode) {
    FILTER BINDINGS
    ---------------------------------------------------- */
 
+// Genre chips are a multi-toggle control, so they stage changes rather than
+// firing a request per click. Anything that runs a search commits them.
+let genresDirty = false;
+
+function setGenresDirty(dirty) {
+    genresDirty = dirty;
+    if (elements.btnApplyGenres) {
+        elements.btnApplyGenres.disabled = !dirty;
+        elements.btnApplyGenres.classList.toggle('is-dirty', dirty);
+    }
+}
+
+function runSearch() {
+    state.currentPage = 1;
+    setGenresDirty(false);
+    // Library views are rendered from cached Emby/Radarr data, so a TMDb
+    // round-trip would change nothing — filter locally instead.
+    if (isLibraryMode()) { rerenderCurrentResults(); return; }
+    triggerSearch();
+}
+
 function initFilters() {
-    const runSearch = () => { state.currentPage = 1; triggerSearch(); };
 
     elements.btnSearch.addEventListener('click', runSearch);
 
     elements.btnPrevPage.addEventListener('click', () => {
-        if (state.currentPage > 1) { state.currentPage--; triggerSearch(); }
+        if (state.currentPage > 1) { state.currentPage--; goToPage(); }
     });
     elements.btnNextPage.addEventListener('click', () => {
-        if (state.currentPage < state.totalPages) { state.currentPage++; triggerSearch(); }
+        if (state.currentPage < state.totalPages) { state.currentPage++; goToPage(); }
     });
 
     const debouncedSearch = debounce(runSearch, 450);
@@ -678,6 +809,11 @@ function initFilters() {
         persistFilters();
         runSearch();
     });
+    elements.voteCountMin.addEventListener('change', (e) => {
+        state.activeFilters.voteCountMin = e.target.value;
+        persistFilters();
+        runSearch();
+    });
     elements.englishOnly.addEventListener('change', (e) => {
         state.activeFilters.language = e.target.checked ? 'en' : '';
         persistFilters();
@@ -696,6 +832,7 @@ function initFilters() {
 
     elements.libraryFilter.addEventListener('change', () => {
         persistFilters();
+        state.currentPage = 1;
         rerenderCurrentResults();
     });
 
@@ -703,6 +840,16 @@ function initFilters() {
         state.genreModes.clear();
         renderGenreChips();
         persistFilters();
+        setGenresDirty(true);
+    });
+
+    elements.btnApplyGenres.addEventListener('click', runSearch);
+
+    elements.btnToggleHidden.addEventListener('click', () => {
+        state.showHidden = !state.showHidden;
+        state.currentPage = 1;
+        updateHiddenToggle();
+        renderMovieShelf(state.currentlyRenderedMovies);
     });
 }
 
@@ -773,9 +920,16 @@ async function triggerSearch() {
         if (state.activeFilters.runtimeMin) {
             params['with_runtime.gte'] = state.activeFilters.runtimeMin;
         }
-        if (state.activeFilters.sortBy === 'vote_average.desc') {
-            params['vote_count.gte'] = '50';
-        }
+        // A minimum vote count is the only effective filter against obscure
+        // festival/never-distributed titles: they carry real release dates and
+        // runtimes, so the date and runtime filters let them through. This used
+        // to apply only when sorting by rating, which is why it never fired on
+        // the default "Newest First" sort.
+        const voteFloor = Math.max(0, parseInt(state.activeFilters.voteCountMin, 10) || 0);
+        const effectiveFloor = state.activeFilters.sortBy === 'vote_average.desc'
+            ? Math.max(voteFloor, 50)
+            : voteFloor;
+        if (effectiveFloor > 0) params['vote_count.gte'] = String(effectiveFloor);
     }
 
     try {
@@ -800,6 +954,8 @@ async function triggerSearch() {
                 if (state.activeFilters.yearMin && (!m.release_date || m.release_date < state.activeFilters.yearMin)) return false;
                 if (state.activeFilters.yearMax && (!m.release_date || m.release_date > state.activeFilters.yearMax)) return false;
                 if (state.activeFilters.language && m.original_language !== state.activeFilters.language) return false;
+                const floor = Math.max(0, parseInt(state.activeFilters.voteCountMin, 10) || 0);
+                if (floor > 0 && (m.vote_count || 0) < floor) return false;
                 return true;
             });
         }
@@ -832,7 +988,15 @@ function renderSkeletons() {
 }
 
 function rerenderCurrentResults() {
-    if (elements.projectionTopBar.hidden) return;
+    // A library view can be shown before any search has run, so reveal the bar
+    // rather than bailing out on it being hidden.
+    if (elements.projectionTopBar.hidden && isLibraryMode()) {
+        clearStatus();
+        elements.projectionTopBar.hidden = false;
+        elements.slabPagination.hidden = true;
+    } else if (elements.projectionTopBar.hidden) {
+        return;
+    }
     renderMovieShelf(state.currentlyRenderedMovies);
 }
 
@@ -842,6 +1006,11 @@ function enrichMovieData(movie) {
     const radarrData = state.radarrMovieData.get(movie.id);
     const cachedPoster = state.posterCache.get(movie.id);
     const merged = { ...movie };
+
+    // A film found via search may also be in Emby; borrow its artwork id.
+    if (!merged.embyItemId) {
+        merged.embyItemId = state.embyMovieData.get(movie.id)?.embyItemId || null;
+    }
 
     if (radarrData) {
         merged.poster_path = merged.poster_path || radarrData.poster_path;
@@ -855,27 +1024,89 @@ function enrichMovieData(movie) {
     return merged;
 }
 
+function isLibraryMode(mode = elements.libraryFilter.value) {
+    return mode === 'library-only' || mode === 'requested-only';
+}
+
+/* Library views are built from cached Emby/Radarr data, not from a TMDb query,
+   so the sidebar filters have to be applied here by hand — otherwise they
+   silently do nothing. Genres are matched by name because Emby and Radarr
+   report names while the chips carry TMDb ids. Language is the one filter that
+   cannot apply: neither source reports original language. */
+function selectedGenreNames(mode) {
+    const ids = new Set(genreIds(mode));
+    return state.genres.filter((g) => ids.has(g.id)).map((g) => g.name.toLowerCase());
+}
+
+function matchesLibraryFilters(movie, includeNames, excludeNames) {
+    const f = state.activeFilters;
+
+    const title = f.title.trim().toLowerCase();
+    if (title && !(movie.title || '').toLowerCase().includes(title)) return false;
+
+    if (f.yearMin && (!movie.release_date || movie.release_date < f.yearMin)) return false;
+    if (f.yearMax && (!movie.release_date || movie.release_date > f.yearMax)) return false;
+
+    const minRuntime = parseInt(f.runtimeMin, 10);
+    if (Number.isInteger(minRuntime) && minRuntime > 0
+        && movie.runtime != null && movie.runtime < minRuntime) return false;
+
+    if (includeNames.length || excludeNames.length) {
+        const own = (movie.genres || []).map((g) => String(g).toLowerCase());
+        // Include is AND, matching TMDb's comma semantics in discover.
+        if (includeNames.length && !includeNames.every((n) => own.includes(n))) return false;
+        if (excludeNames.some((n) => own.includes(n))) return false;
+    }
+    return true;
+}
+
+function applyLibraryFilters(movies) {
+    const includeNames = selectedGenreNames('include');
+    const excludeNames = selectedGenreNames('exclude');
+    return movies.filter((m) => matchesLibraryFilters(m, includeNames, excludeNames));
+}
+
 function renderMovieShelf(movies) {
     state.currentlyRenderedMovies = movies;
     const filterMode = elements.libraryFilter.value;
 
     let moviesToRender;
     if (filterMode === 'library-only') {
-        moviesToRender = [...state.embyMovieData.values()].map(enrichMovieData);
-        moviesToRender.sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''));
-        if (moviesToRender.length === 0) {
+        const all = [...state.embyMovieData.values()].map(enrichMovieData);
+        if (all.length === 0) {
             renderEmptyShelf('No Emby library data. Connect Emby in Settings.');
+            updateResultsCount(0, filterMode);
             return;
         }
+        moviesToRender = filterHidden(applyLibraryFilters(all));
+        moviesToRender.sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''));
+        if (moviesToRender.length === 0) {
+            state.totalPages = 1;
+            updateResultsCount(0, filterMode);
+            elements.slabPagination.hidden = true;
+            renderEmptyShelf(`No films in your Emby library match these filters (${all.length} in library).`);
+            return;
+        }
+        moviesToRender = paginateLibrary(moviesToRender, filterMode);
     } else if (filterMode === 'requested-only') {
-        moviesToRender = [...state.radarrMovieData.values()]
+        const all = [...state.radarrMovieData.values()]
             .filter((m) => !state.embyLibrary.has(m.id))
             .map(enrichMovieData);
-        moviesToRender.sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''));
-        if (moviesToRender.length === 0) {
+        if (all.length === 0) {
             renderEmptyShelf('Nothing is pending in Radarr.');
+            updateResultsCount(0, filterMode);
             return;
         }
+        moviesToRender = filterHidden(applyLibraryFilters(all));
+        moviesToRender.sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''));
+        if (moviesToRender.length === 0) {
+            state.totalPages = 1;
+            updateResultsCount(0, filterMode);
+            elements.slabPagination.hidden = true;
+            renderEmptyShelf(`No pending Radarr films match these filters (${all.length} pending).`);
+            return;
+        }
+        moviesToRender = paginateLibrary(moviesToRender, filterMode);
     } else {
         moviesToRender = movies.map(enrichMovieData);
         if (filterMode === 'hide-owned') {
@@ -885,9 +1116,11 @@ function renderMovieShelf(movies) {
                 return !owned && !requested;
             });
         }
+        moviesToRender = filterHidden(moviesToRender);
     }
 
-    updateResultsCount(moviesToRender.length, filterMode);
+    if (!isLibraryMode(filterMode)) updateResultsCount(moviesToRender.length, filterMode);
+    updateHiddenToggle();
 
     if (moviesToRender.length === 0) {
         renderEmptyShelf('Everything on this page is already in your library. Try the next page.');
@@ -899,7 +1132,26 @@ function renderMovieShelf(movies) {
     elements.movieShelf.innerHTML = '';
     elements.movieShelf.appendChild(fragment);
 
-    backfillMissingPosters(moviesToRender);
+    // Cards with no artwork resolve lazily as they scroll into view; see
+    // observePoster. buildMovieCard registers them.
+}
+
+// Slices the filtered library list to the current page and updates the shared
+// pager state so the existing pagination control works unchanged.
+function paginateLibrary(list, filterMode) {
+    state.totalResults = list.length;
+    state.totalPages = Math.max(1, Math.ceil(list.length / LIBRARY_PAGE_SIZE));
+    if (state.currentPage > state.totalPages) state.currentPage = state.totalPages;
+
+    const start = (state.currentPage - 1) * LIBRARY_PAGE_SIZE;
+    const page = list.slice(start, start + LIBRARY_PAGE_SIZE);
+
+    elements.resultsCount.textContent = list.length > LIBRARY_PAGE_SIZE
+        ? `${(start + 1).toLocaleString()}–${(start + page.length).toLocaleString()} of ${list.length.toLocaleString()}`
+        : `${list.length.toLocaleString()} films`;
+
+    renderPagination();
+    return page;
 }
 
 function renderEmptyShelf(message) {
@@ -926,6 +1178,7 @@ function buildMovieCard(movie) {
     if (inEmby) card.classList.add('in-library');
     else if (inRadarr) card.classList.add('requested');
     card.dataset.id = String(movie.id);
+    card.dataset.title = movie.title || '';
     card.tabIndex = 0;
     card.setAttribute('role', 'button');
     card.setAttribute('aria-label', `${movie.title} — view details`);
@@ -934,16 +1187,35 @@ function buildMovieCard(movie) {
     const score = (!Number.isNaN(scoreVal) && movie.vote_count > 0) ? scoreVal.toFixed(1) : '—';
     const year = movie.release_date ? movie.release_date.split('-')[0] : '—';
 
+    const isHidden = state.hiddenIds.has(movie.id);
+    if (isHidden) card.classList.add('is-hidden');
+
     let badge = '';
-    if (inEmby) badge = '<div class="card-badge badge-library">In Library</div>';
+    if (isHidden) badge = '<div class="card-badge badge-hidden">Hidden</div>';
+    else if (inEmby) badge = '<div class="card-badge badge-library">In Library</div>';
     else if (inRadarr) badge = '<div class="card-badge badge-requested">Requested</div>';
 
-    const poster = movie.poster_path
-        ? `<img src="https://image.tmdb.org/t/p/w342${esc(movie.poster_path)}" alt="" class="card-poster" loading="lazy" decoding="async">`
-        : `<div class="poster-placeholder"><span class="placeholder-skull">💀</span><span class="placeholder-text">${esc(movie.title)}</span></div>`;
+    const hideBtn = `<button class="card-hide" type="button" aria-label="${isHidden ? 'Unhide' : 'Hide'} ${esc(movie.title)}" title="${isHidden ? 'Unhide this film' : 'Hide this film'}">${isHidden ? '&#8634;' : '&times;'}</button>`;
+
+    // Preference order: a TMDb path we already hold, then Emby's own artwork
+    // (no external call, and it always matches the library), then a lazy TMDb
+    // lookup driven by the intersection observer below.
+    const cachedPath = state.posterCache.get(movie.id);
+    const posterUrl = movie.poster_path
+        ? tmdbPosterUrl(movie.poster_path)
+        : cachedPath
+            ? tmdbPosterUrl(cachedPath)
+            : movie.embyItemId
+                ? `/api/emby/image/${encodeURIComponent(movie.embyItemId)}`
+                : null;
+
+    const poster = posterUrl
+        ? `<img src="${esc(posterUrl)}" alt="" class="card-poster" loading="lazy" decoding="async">`
+        : placeholderHTML(movie.title);
 
     card.innerHTML = `
         ${badge}
+        ${hideBtn}
         <div class="card-poster-wrap">${poster}</div>
         <div class="card-info">
             <h3 class="card-title">${esc(movie.title)}</h3>
@@ -958,12 +1230,21 @@ function buildMovieCard(movie) {
     if (img) {
         img.addEventListener('load', () => img.classList.add('loaded'));
         if (img.complete) img.classList.add('loaded');
-        // A stale or mis-sized TMDb path must not leave a broken-image icon.
         img.addEventListener('error', () => {
-            img.closest('.card-poster-wrap').innerHTML =
-                `<div class="poster-placeholder"><span class="placeholder-skull">💀</span><span class="placeholder-text">${esc(movie.title)}</span></div>`;
+            // Emby had no artwork for this item, or the TMDb path is stale.
+            // Drop to a placeholder and let the observer try a TMDb lookup.
+            card.querySelector('.card-poster-wrap').innerHTML = placeholderHTML(movie.title);
+            if (!movie.poster_path) observePoster(card);
         });
+    } else {
+        observePoster(card);
     }
+
+    // Must not open the detail modal underneath it.
+    card.querySelector('.card-hide').addEventListener('click', (e) => {
+        e.stopPropagation();
+        setHidden(movie.id, !isHidden);
+    });
 
     const open = () => loadMovieDetailPopup(movie);
     card.addEventListener('click', open);
@@ -974,37 +1255,94 @@ function buildMovieCard(movie) {
     return card;
 }
 
-// Films sourced from Emby have no poster path. Look them up through the cached
-// TMDb proxy, a few at a time, and patch the cards in place.
-async function backfillMissingPosters(movies) {
-    const missing = movies
-        .filter((m) => !m.poster_path && !state.posterCache.has(m.id))
-        .slice(0, 24);
-    if (missing.length === 0) return;
+/* Poster backfill.
 
-    const queue = [...missing];
-    const workers = Array.from({ length: 4 }, async () => {
-        while (queue.length) {
-            const movie = queue.shift();
-            try {
-                const detail = await tmdb(`movie/${movie.id}`);
-                if (!detail.poster_path) {
-                    state.posterCache.set(movie.id, null);
-                    continue;
-                }
-                state.posterCache.set(movie.id, detail.poster_path);
-                patchCardPoster(movie.id, detail.poster_path, movie.title);
-            } catch (err) {
-                state.posterCache.set(movie.id, null);
-            }
-        }
-    });
-    await Promise.all(workers);
+   Films that came from Emby have no TMDb poster path. Rather than looking up a
+   fixed number of them per render (which left every card past the cap showing a
+   placeholder forever), each posterless card is observed and resolved only when
+   it scrolls near the viewport. Results are cached in localStorage, so a reload
+   does not start from nothing. */
+
+let posterObserver = null;
+const posterQueue = [];
+let posterWorkers = 0;
+const POSTER_CONCURRENCY = 4;
+
+function loadPosterCache() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(POSTER_CACHE_KEY) || '[]');
+        if (Array.isArray(raw)) state.posterCache = new Map(raw);
+    } catch (err) {
+        state.posterCache = new Map();
+    }
 }
 
-function patchCardPoster(id, posterPath, title) {
-    const card = elements.movieShelf.querySelector(`.movie-card[data-id="${CSS.escape(String(id))}"]`);
-    if (!card) return;
+const savePosterCache = debounce(() => {
+    try {
+        let entries = [...state.posterCache.entries()];
+        if (entries.length > POSTER_CACHE_MAX) entries = entries.slice(-POSTER_CACHE_MAX);
+        localStorage.setItem(POSTER_CACHE_KEY, JSON.stringify(entries));
+    } catch (err) {
+        /* Quota or private mode — the cache just won't survive this reload. */
+    }
+}, 1000);
+
+function observePoster(card) {
+    if (!('IntersectionObserver' in window)) {
+        enqueuePosterLookup(card);
+        return;
+    }
+    if (!posterObserver) {
+        posterObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (!entry.isIntersecting) return;
+                posterObserver.unobserve(entry.target);
+                enqueuePosterLookup(entry.target);
+            });
+        }, { rootMargin: '500px 0px' });
+    }
+    posterObserver.observe(card);
+}
+
+function enqueuePosterLookup(card) {
+    posterQueue.push(card);
+    while (posterWorkers < POSTER_CONCURRENCY && posterQueue.length) {
+        posterWorkers += 1;
+        drainPosterQueue().finally(() => { posterWorkers -= 1; });
+    }
+}
+
+async function drainPosterQueue() {
+    while (posterQueue.length) {
+        const card = posterQueue.shift();
+        if (!card.isConnected) continue;
+
+        const id = Number(card.dataset.id);
+        const title = card.dataset.title || '';
+
+        if (state.posterCache.has(id)) {
+            const cached = state.posterCache.get(id);
+            if (cached) patchCardPoster(card, tmdbPosterUrl(cached), title);
+            continue;
+        }
+
+        try {
+            const detail = await tmdb(`movie/${id}`);
+            state.posterCache.set(id, detail.poster_path || null);
+            savePosterCache();
+            if (detail.poster_path) patchCardPoster(card, tmdbPosterUrl(detail.poster_path), title);
+        } catch (err) {
+            state.posterCache.set(id, null);
+            savePosterCache();
+        }
+    }
+}
+
+function tmdbPosterUrl(posterPath) {
+    return `https://image.tmdb.org/t/p/w342${posterPath}`;
+}
+
+function patchCardPoster(card, url, title) {
     const wrap = card.querySelector('.card-poster-wrap');
     if (!wrap) return;
     const img = document.createElement('img');
@@ -1013,14 +1351,26 @@ function patchCardPoster(id, posterPath, title) {
     img.decoding = 'async';
     img.alt = '';
     img.addEventListener('load', () => img.classList.add('loaded'));
-    img.src = `https://image.tmdb.org/t/p/w342${posterPath}`;
+    img.addEventListener('error', () => { wrap.innerHTML = placeholderHTML(title); });
+    img.src = url;
     wrap.innerHTML = '';
     wrap.appendChild(img);
+}
+
+function placeholderHTML(title) {
+    return `<div class="poster-placeholder"><span class="placeholder-skull">💀</span><span class="placeholder-text">${esc(title)}</span></div>`;
 }
 
 /* ----------------------------------------------------
    PAGINATION
    ---------------------------------------------------- */
+
+// Paging a library view is a local slice; paging a search refetches from TMDb.
+function goToPage() {
+    if (isLibraryMode()) renderMovieShelf(state.currentlyRenderedMovies);
+    else triggerSearch();
+    elements.resultsPanel?.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 function renderPagination() {
     if (state.totalPages <= 1) {
@@ -1056,8 +1406,7 @@ function renderPagination() {
         if (page === current) btn.setAttribute('aria-current', 'page');
         btn.addEventListener('click', () => {
             state.currentPage = page;
-            triggerSearch();
-            elements.movieShelf.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            goToPage();
         });
         container.appendChild(btn);
         lastPage = page;

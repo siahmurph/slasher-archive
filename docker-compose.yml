@@ -15,4 +15,6 @@ services:
     volumes:
       # Holds config.json with your TMDb/Radarr/Emby API keys in plaintext.
       # Required — without it, settings are lost on every container recreate.
+      # The container runs as uid 1000, so the host directory must be owned by
+      # it:  chown -R 1000:1000 /opt/appdata/slasher-archive
       - /opt/appdata/slasher-archive:/config

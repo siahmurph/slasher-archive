@@ -55,8 +55,13 @@
     --font-mono: 'JetBrains Mono', ui-monospace, 'Courier New', monospace;
 }
 
+/* Dark tokens are defined twice on purpose: once for the system preference
+   (skipped when the user has explicitly chosen light) and once for an explicit
+   dark choice, so a manual toggle wins in both directions. */
 @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
+        color-scheme: dark;
+
         --bg-page: #131011;
         --bg-surface: #1c1819;
         --bg-surface-dim: #241f20;
@@ -86,6 +91,43 @@
         --status-requested: #d9ae5c;
         --status-requested-bg: #2c2415;
     }
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+
+        --bg-page: #131011;
+        --bg-surface: #1c1819;
+        --bg-surface-dim: #241f20;
+        --bg-surface-elevated: #221d1e;
+        --bg-overlay: rgba(0, 0, 0, 0.78);
+        --skeleton-base: #241f20;
+        --skeleton-shine: #2e2829;
+
+        --primary: #c2414f;
+        --primary-hover: #d65463;
+        --primary-light: #33191d;
+        --primary-contrast: #16100f;
+
+        --accent: #e05a65;
+
+        --text-primary: #f0ebe6;
+        --text-secondary: #b3aaa5;
+        --text-muted: #948b87;
+        --text-inverse: #16100f;
+
+        --border: #3a3132;
+        --border-light: #2c2526;
+        --border-strong: #6b5c5d;
+
+        --status-library: #8fc98a;
+        --status-library-bg: #1e2a1d;
+        --status-requested: #d9ae5c;
+        --status-requested-bg: #2c2415;
+}
+
+:root[data-theme="light"] {
+    color-scheme: light;
 }
 
 /* ----------------------------------------------------
@@ -147,7 +189,9 @@ img {
 .app-container {
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
 }
 
 .app-header {
@@ -158,8 +202,7 @@ img {
     align-items: center;
     justify-content: space-between;
     padding: 0 28px;
-    position: sticky;
-    top: 0;
+    flex-shrink: 0;
     z-index: 100;
 }
 
@@ -197,6 +240,10 @@ img {
     display: flex;
     flex: 1;
     position: relative;
+    /* min-height:0 lets the children actually scroll instead of stretching
+       the flex container to fit their content. */
+    min-height: 0;
+    overflow: hidden;
 }
 
 /* ----------------------------------------------------
@@ -209,6 +256,7 @@ img {
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
+    height: 100%;
     overflow: hidden;
     transition: width var(--transition), min-width var(--transition), opacity var(--transition);
 }
@@ -351,6 +399,19 @@ img {
     gap: 8px;
 }
 
+.dual-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.dual-inputs > div {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
 .range-inputs .filter-input { flex: 1; min-width: 0; }
 
 .range-separator {
@@ -403,9 +464,33 @@ img {
     transition: color var(--transition), border-color var(--transition);
 }
 
-.btn-clear:hover {
+.btn-clear:hover:not(:disabled) {
     color: var(--primary);
     border-color: var(--primary);
+}
+
+.filter-label-actions {
+    display: flex;
+    gap: 5px;
+}
+
+/* Genre changes are staged, so Apply only lights up when there is something
+   pending — otherwise it reads as a button that does nothing. */
+.btn-apply:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.btn-apply.is-dirty {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--primary-contrast);
+}
+
+.btn-apply.is-dirty:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+    color: var(--primary-contrast);
 }
 
 /* Genre chips — one control, three states.
@@ -536,6 +621,9 @@ img {
     flex-direction: column;
     gap: 18px;
     min-width: 0;
+    min-height: 0;
+    /* The films scroll here, not on the page, so the sidebar stays fixed. */
+    overflow-y: auto;
     position: relative;
     /* No background wash here: cards need the clean bone ground behind them. */
 }
@@ -544,8 +632,14 @@ img {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding-bottom: 13px;
+    padding: 0 0 13px;
     border-bottom: 1px solid var(--border-light);
+    position: sticky;
+    top: -22px;
+    z-index: 20;
+    background: var(--bg-page);
+    margin: -22px -28px 0;
+    padding: 22px 28px 13px;
 }
 
 .top-bar-controls {
@@ -610,6 +704,8 @@ img {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 20px;
+    align-content: start;
+    flex-shrink: 0;
 }
 
 .movie-card {
@@ -652,6 +748,77 @@ img {
     background: var(--status-requested-bg);
     color: var(--status-requested);
     border: 1px solid var(--status-requested);
+}
+
+/* Hide / unhide control. Revealed on hover or keyboard focus so it does not
+   clutter a wall of posters. */
+.card-hide {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 3;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    opacity: 0;
+    transition: opacity var(--transition), background var(--transition), color var(--transition);
+}
+
+.movie-card:hover .card-hide,
+.movie-card:focus-within .card-hide,
+.card-hide:focus-visible {
+    opacity: 1;
+}
+
+.card-hide:hover {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--primary-contrast);
+}
+
+.movie-card.is-hidden {
+    opacity: 0.45;
+    filter: grayscale(0.7);
+}
+
+.movie-card.is-hidden .card-hide { opacity: 1; }
+.movie-card.is-hidden:hover { opacity: 0.8; filter: grayscale(0.3); }
+
+.badge-hidden {
+    background: var(--bg-surface-dim);
+    color: var(--text-muted);
+    border: 1px solid var(--border-strong);
+}
+
+/* Top-bar toggle for revealing hidden films. */
+.btn-toggle {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 5px 9px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+
+.btn-toggle:hover { border-color: var(--primary); color: var(--primary); }
+
+.btn-toggle.is-active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--primary-contrast);
 }
 
 .movie-card.in-library { border-color: var(--status-library); }
@@ -1190,6 +1357,7 @@ img {
     }
 
     .results-panel { padding: 16px 14px 76px; }
+    .results-top-bar { margin: -16px -14px 0; padding: 16px 14px 12px; top: -16px; }
     .movie-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; }
 
     .results-top-bar { flex-wrap: wrap; gap: 8px; }
