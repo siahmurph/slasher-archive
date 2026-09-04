@@ -15,8 +15,23 @@ const publicDir = path.join(__dirname, 'public');
 const configDir = process.env.CONFIG_DIR || path.join(__dirname, 'config');
 const configPath = path.join(configDir, 'config.json');
 
+const APP_VERSION = require('./package.json').version;
+
 app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
+
+/* Every /api response is uncacheable.
+
+   A browser caches a 301 persistently. Versions before 2.0.4 could hand a bare
+   3xx back from the Radarr proxy, which Chrome then replayed from cache without
+   ever contacting the server again — the request vanished from the logs and no
+   redeploy could fix it. Nothing under /api is worth caching anyway. */
+app.use('/api', (req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    console.log(`[api] ${req.method} ${req.originalUrl}`);
+    next();
+});
 
 // Reject malformed JSON with JSON, not an Express HTML error page.
 app.use((err, req, res, next) => {
@@ -412,6 +427,7 @@ function sendProxyError(res, error, label) {
 app.get('/healthz', (req, res) => {
     res.json({
         ok: true,
+        version: APP_VERSION,
         configWritable,
         tmdb: Boolean(appConfig.tmdbApiKey),
         radarr: Boolean(appConfig.radarrUrl && appConfig.radarrApiKey),
@@ -433,7 +449,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Slasher Archive listening on port ${PORT}`);
+    console.log(`Slasher Archive v${APP_VERSION} listening on port ${PORT}`);
     console.log(`Config directory: ${configDir}`);
     checkConfigWritable();
 });
