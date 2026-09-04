@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <title>Slasher Archive | Horror Film Discovery</title>
+    <meta name="description" content="A curated horror film discovery engine with Radarr and Emby integration.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="header-brand">
+                <span class="header-sub">Curated Horror Cinema</span>
+                <h1 class="header-title" id="mainTitle">Slasher Archive</h1>
+            </div>
+            <div class="header-controls">
+                <button class="btn btn-config" id="btnOpenConfig" type="button" title="Configure API keys and settings">
+                    Settings
+                </button>
+            </div>
+        </header>
+
+        <main class="app-body">
+            <div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
+
+            <aside class="sidebar" id="sidebarPanel" aria-label="Filters">
+                <div class="sidebar-header">
+                    <h2 class="sidebar-title">Filters</h2>
+                    <button class="sidebar-toggle" id="btnToggleSidebar" type="button" title="Collapse filters" aria-label="Collapse filters">&times;</button>
+                </div>
+                <div class="sidebar-content">
+
+                    <div class="filter-group">
+                        <label for="searchTitle" class="filter-label">Search</label>
+                        <input type="search" id="searchTitle" class="filter-input" placeholder="Film title…" autocomplete="off">
+                        <button class="btn btn-primary btn-block" id="btnSearch" type="button">Search Films</button>
+                    </div>
+
+                    <div class="filter-group">
+                        <span class="filter-label">Release Date</span>
+                        <div class="range-inputs">
+                            <input type="date" id="yearMin" class="filter-input date-input" aria-label="Released from">
+                            <span class="range-separator">to</span>
+                            <input type="date" id="yearMax" class="filter-input date-input" aria-label="Released until">
+                        </div>
+                        <label class="checkbox-label" for="upcomingReleases">
+                            <input type="checkbox" id="upcomingReleases">
+                            Include unreleased films
+                        </label>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="runtimeMin" class="filter-label">Min. Runtime (mins)</label>
+                        <input type="number" id="runtimeMin" class="filter-input number-input" value="70" min="0" max="300" step="5">
+                    </div>
+
+                    <div class="filter-group">
+                        <div class="filter-label-row">
+                            <span class="filter-label">Genres</span>
+                            <button class="btn-clear" id="btnClearGenres" type="button" title="Clear all genre filters">Clear</button>
+                        </div>
+                        <div class="genre-chips" id="genreChips" role="group" aria-label="Genre filters">
+                            <div class="loading-small">Loading genres…</div>
+                        </div>
+                        <p class="genre-legend">
+                            <span class="legend-swatch legend-include"></span> include
+                            <span class="legend-swatch legend-exclude"></span> exclude
+                            <span class="legend-hint">click a genre to cycle</span>
+                        </p>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="checkbox-label" for="englishOnly">
+                            <input type="checkbox" id="englishOnly" checked>
+                            English language only
+                        </label>
+                    </div>
+
+                </div>
+            </aside>
+
+            <button class="sidebar-expand" id="btnExpandSidebar" type="button" title="Show filters" hidden>Filters</button>
+
+            <section class="results-panel" aria-label="Search results">
+                <div class="results-top-bar" id="projectionTopBar" hidden>
+                    <div class="top-bar-controls">
+                        <label for="libraryFilter" class="top-bar-label">Show</label>
+                        <select id="libraryFilter" class="filter-input select-input">
+                            <option value="all">All films</option>
+                            <option value="hide-owned">Hide owned &amp; requested</option>
+                            <option value="library-only">In Emby library</option>
+                            <option value="requested-only">Requested, not yet in library</option>
+                        </select>
+                    </div>
+                    <div class="results-count" id="resultsCount" aria-live="polite"></div>
+                    <div class="top-bar-controls">
+                        <label for="sortBySelect" class="top-bar-label">Sort</label>
+                        <select id="sortBySelect" class="filter-input select-input">
+                            <option value="popularity.desc">Most Popular</option>
+                            <option value="primary_release_date.desc" selected>Newest First</option>
+                            <option value="primary_release_date.asc">Oldest First</option>
+                            <option value="vote_average.desc">Highest Rated</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="results-status" id="slabStatus">
+                    <p class="status-msg">Add your TMDb API key in Settings to begin.</p>
+                </div>
+
+                <div class="movie-grid" id="movieShelf"></div>
+
+                <nav class="pagination" id="slabPagination" aria-label="Pagination" hidden>
+                    <button class="btn btn-page-arrow" id="btnPrevPage" type="button" aria-label="Previous page" disabled>&#9664;</button>
+                    <div class="page-numbers" id="pageNumbers"></div>
+                    <button class="btn btn-page-arrow" id="btnNextPage" type="button" aria-label="Next page">&#9654;</button>
+                </nav>
+            </section>
+        </main>
+    </div>
+
+    <div class="modal-overlay" id="movieDetailModal" role="dialog" aria-modal="true" aria-labelledby="detailTitle" aria-hidden="true">
+        <div class="modal-card detail-card">
+            <button class="modal-close" id="btnCloseDetail" type="button" aria-label="Close">&times;</button>
+            <div class="modal-body" id="movieDetailContent"></div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="configModal" role="dialog" aria-modal="true" aria-labelledby="configTitle" aria-hidden="true">
+        <div class="modal-card config-card">
+            <button class="modal-close" id="btnCloseConfig" type="button" aria-label="Close">&times;</button>
+            <h2 class="modal-title" id="configTitle">Settings</h2>
+
+            <div class="modal-body">
+                <div class="config-section">
+                    <h3 class="config-heading">TMDb API</h3>
+                    <label for="tmdbApiKey" class="filter-label">API Key (v3)</label>
+                    <input type="password" id="tmdbApiKey" class="filter-input" placeholder="Paste your TMDb API key…" autocomplete="off">
+                    <span class="input-hint">Stored on the server. Never sent back to the browser.</span>
+                </div>
+
+                <hr class="config-divider">
+
+                <div class="config-section">
+                    <h3 class="config-heading">Radarr Connection</h3>
+                    <div class="config-fields">
+                        <div>
+                            <label for="radarrUrl" class="filter-label">Server URL</label>
+                            <input type="text" id="radarrUrl" class="filter-input" placeholder="http://192.168.1.50:7878" autocomplete="off">
+                        </div>
+                        <div>
+                            <label for="radarrApiKey" class="filter-label">API Key</label>
+                            <input type="password" id="radarrApiKey" class="filter-input" placeholder="Radarr API key…" autocomplete="off">
+                            <span class="input-hint">Settings &rarr; General &rarr; Security.</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-block" id="btnConnectRadarr" type="button">Connect to Radarr</button>
+                    <div id="radarrConnectionStatus" class="connection-status" role="status">Not connected.</div>
+
+                    <div id="radarrPathConfigs" class="path-configs" hidden>
+                        <div class="config-fields">
+                            <div>
+                                <label for="radarrRootFolder" class="filter-label">Root Folder</label>
+                                <select id="radarrRootFolder" class="filter-input select-input"></select>
+                            </div>
+                            <div>
+                                <label for="radarrQualityProfile" class="filter-label">Quality Profile</label>
+                                <select id="radarrQualityProfile" class="filter-input select-input"></select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="config-divider">
+
+                <div class="config-section">
+                    <h3 class="config-heading">Emby Library</h3>
+                    <div class="config-fields">
+                        <div>
+                            <label for="embyUrl" class="filter-label">Server URL</label>
+                            <input type="text" id="embyUrl" class="filter-input" placeholder="http://192.168.1.50:8096" autocomplete="off">
+                        </div>
+                        <div>
+                            <label for="embyApiKey" class="filter-label">API Key</label>
+                            <input type="password" id="embyApiKey" class="filter-input" placeholder="Emby API key…" autocomplete="off">
+                            <span class="input-hint">Dashboard &rarr; Advanced &rarr; API Keys.</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-block" id="btnConnectEmby" type="button">Connect to Emby</button>
+                    <div id="embyConnectionStatus" class="connection-status" role="status">Not connected.</div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary btn-block" id="btnSaveConfig" type="button">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

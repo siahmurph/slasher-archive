@@ -3,26 +3,56 @@ name: Build and Publish Docker Image
 on:
   push:
     branches: [ "main" ]
+    # Pushing a vX.Y.Z tag publishes the semver tags. Without this, a tag push
+    # produces no build at all and only a published Release would trigger one.
+    tags: [ "v*.*.*" ]
+  pull_request:
+    branches: [ "main" ]
   release:
     types: [published]
 
+# One build per ref at a time: two quick pushes to main would otherwise race,
+# and whichever finished last would win regardless of which commit was newer.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
-  # github.repository is in the format owner/repository
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # An emulated arm64 build is the most likely thing to hang here; without
+    # this it would burn the default 360-minute job timeout first.
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
+      attestations: write
+      id-token: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # Fails the build if package-lock.json has drifted from package.json.
+      - name: Verify lockfile and syntax
+        run: |
+          npm ci --omit=dev
+          node --check server.js
+          node --check public/app.js
+
+      # Only main and releases publish; pull requests build to verify and stop.
       - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -37,6 +67,8 @@ jobs:
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
             type=sha,format=short
 
       - name: Set up QEMU
@@ -46,11 +78,25 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          # arm64 matters for NAS/Pi deploys, but building it under QEMU is
+          # slow and a PR only needs to prove the Dockerfile still builds.
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # PR cache writes are branch-scoped and evicted quickly, and fail
+          # outright from forks — only populate the cache on real publishes.
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,mode=max' || '' }}
+
+      - name: Generate build provenance attestation
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true

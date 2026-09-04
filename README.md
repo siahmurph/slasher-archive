@@ -1,125 +1,174 @@
-# 🩸 SLASHER ARCHIVE
+# 🩸 Slasher Archive
 
 [![Build and Publish Docker Image](https://github.com/siahmurph/slasher-archive/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/siahmurph/slasher-archive/actions/workflows/docker-publish.yml)
 
-> *"The ultimate vintage 70s gothic & 80s slasher styled horror search engine and Radarr integration utility."*
-
-Slasher Archive is a vintage, responsive, retro CRT-styled web application built for summoning 70s, 80s, and classic gothic horror films and preparing them for automated Radarr downloads. Filter through the darkest recesses of cinematic history, select your targets, and build the ultimate custom list!
-
----
-
-## 🔮 FEATURES
-
-- **Retro CRT Aesthetic:** Immersive 70s/80s horror vibe with flickering CRT scanlines, screen jitter, ambient grain, and glowing crimson-neon buttons.
-- **Ritual Filters:**
-  - **Text Search:** Summon specific horror titles instantly.
-  - **Release Timeline:** Filter movies by exact release brackets (e.g. 1970 to 1989 for peak slasher years).
-  - **Coven Genres:** Include specific genre associations (e.g., Horror, Thriller, Mystery).
-  - **Banished Genres:** Exclude unwanted genres (e.g., Comedy, Documentary, Romance) to keep your library pure.
-  - **Cast & Crew Inclusions:** Summon movies starring specific actors or directed by favorite horror directors.
-  - **Banished Directors:** Exclude directors you want to bypass.
-- **The Body Count (Kill List Basket):** Track selected films interactively and export them instantly as:
-  - `💾 EXPORT CSV`: Format optimized for uploading to Trakt.tv custom lists.
-  - `📜 EXPORT TXT`: Plain text TMDb ID format.
-- **Direct Radarr Integration:** Connect directly to your local Radarr instance to fetch root folders and quality profiles, adding films straight to your download queue securely via the Express proxy server.
+A horror film discovery engine for people who run their own media stack. Search
+TMDb, see at a glance what you already own in **Emby** and what is already queued
+in **Radarr**, and push new films straight into Radarr in one click.
 
 ---
 
-## 🚀 LOCAL RUN (NODE.JS)
+## Features
 
-To start the Slasher Archive locally:
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/siahmurph/slasher-archive.git
-   cd slasher-archive
-   ```
-2. Install production dependencies:
-   ```bash
-   npm install --only=production
-   ```
-3. Run the Node.js application server:
-   ```bash
-   npm start
-   ```
-4. Open [http://localhost:80](http://localhost:80) (or customize the port using the `PORT` environment variable).
+- **Discovery filters** — text search, release-date range, minimum runtime,
+  original language, and tri-state genre chips (click once to include, again to
+  exclude, again to clear).
+- **Library awareness** — connect Emby and Radarr and every card is labelled
+  *In Library* or *Requested*. Filter to hide what you already have.
+- **One-click Radarr import** — pick a root folder and quality profile once,
+  then add films from the detail view with a search triggered automatically.
+- **Filters persist** across reloads; sidebar state and view preferences are
+  remembered per browser.
+- **Light and dark themes**, following your OS preference.
 
 ---
 
-## 🐳 RUNNING WITH DOCKER COMPOSE
+## Configuration and secrets
 
-Run the containerized Slasher Archive locally by building the image from source:
+All credentials are held **server-side** in `config.json` inside the config
+directory. They are used by the server's own proxy routes and are **never sent
+to the browser** — `GET /api/config` returns only whether each key is set.
 
-```yaml
-version: '3.8'
+`config.json` stores these keys in plaintext. Two consequences worth knowing:
 
-services:
-  horror-radarr-exporter:
-    build: .
-    container_name: horror-radarr-exporter
-    restart: unless-stopped
-    ports:
-      - "8383:80"
+- Keep the host config directory off any share that is backed up somewhere less
+  trusted than the host itself.
+- `config/` is gitignored. Do not commit it.
+
+The app has no authentication of its own, and anyone who can reach it can use
+its Radarr and Emby proxy routes. Keep it on a trusted network, or put it
+behind your reverse proxy's auth.
+
+| Variable | Default | Purpose |
+| :--- | :--- | :--- |
+| `PORT` | `8080` | HTTP listen port |
+| `CONFIG_DIR` | `./config` (`/config` in the image) | Where `config.json` is written |
+| `UPSTREAM_TIMEOUT_MS` | `15000` | Timeout for Radarr / Emby / TMDb calls |
+
+---
+
+## Running locally
+
+```bash
+git clone https://github.com/siahmurph/slasher-archive.git
+cd slasher-archive
+npm ci --omit=dev
+npm start
 ```
 
-To boot the container:
+Open <http://localhost:8080> and add your TMDb API key in **Settings**.
+
+---
+
+## Running with Docker
+
 ```bash
 docker compose up -d
 ```
-Access the dashboard at `http://localhost:8383`.
 
----
+The bundled `docker-compose.yml` pulls the published image. To build from
+source instead, replace the `image:` line with `build: .`.
 
-## ⚓ DEPLOYING VIA PORTAINER (RECOMMENDED)
-
-You can easily deploy Slasher Archive directly into Portainer using the pre-built image hosted on the **GitHub Container Registry (GHCR)**.
-
-### Portainer Stack Blueprint
-
-Create a **New Stack** in Portainer, name it `slasher-archive`, and paste the following `docker-compose` YAML:
+### Stack
 
 ```yaml
-version: '3.8'
-
 services:
   slasher-archive:
-    image: ghcr.io/siahmurph/slasher-archive:latest
+    image: ghcr.io/siahmurph/slasher-archive:2.0.0
     container_name: slasher-archive
     restart: unless-stopped
     ports:
-      - "8383:80"
+      - "8383:8080"
     environment:
-      - PORT=80
+      - PORT=8080
+      - CONFIG_DIR=/config
+    volumes:
+      # Required. Without it your settings are lost on every container recreate.
+      - /opt/appdata/slasher-archive:/config
 ```
 
-> [!NOTE]
-> **To personalize your Stack:**
-> Replace `YOUR_GITHUB_USERNAME` in the `image` field with your actual GitHub username (in lowercase) e.g., `ghcr.io/johnsmith/slasher-archive:latest`.
+Then open `http://<host>:8383`.
+
+Images are published for `linux/amd64` and `linux/arm64`.
+
+### Image tags
+
+| Tag | Points at |
+| :--- | :--- |
+| `2.0.0` | That exact release |
+| `2.0`, `2` | Newest release in that line |
+| `sha-a1b2c3d` | One specific `main` commit |
+| `latest` | Whatever `main` built most recently |
+
+`latest` follows `main`, not releases — so an unreviewed commit is one
+`docker compose pull` away from your stack. Pin to a version in anything you
+actually run.
+
+Releases are cut by pushing a tag:
+
+```bash
+git tag -a v2.1.0 -m "v2.1.0" && git push origin v2.1.0
+```
+
+> [!IMPORTANT]
+> **Upgrading from v1.x — three breaking changes:**
 >
-> If your GitHub repository is private, you will need to:
-> 1. Make the GitHub Package visibility **Public** on your GitHub account (navigate to your repo > *Packages* > *slasher-archive* > *Package Settings* > *Danger Zone* > *Change Visibility* to Public).
-> 2. Alternatively, add your GitHub credentials (username and Personal Access Token) as a Registry in Portainer (*Settings* > *Registries* > *Add Registry* > *GitHub Container Registry*).
+> 1. The config path inside the container moved from `/app/config` to
+>    `/config`, so it can no longer be served as a static asset. Change your
+>    volume's container side to `:/config`. The host side is unchanged, so your
+>    existing `config.json` carries over.
+> 2. The container now listens on **8080**, not 80, because it runs as a
+>    non-root user. Change your port mapping to `8383:8080` and set `PORT=8080`.
+> 3. Because v1 served the config directory as static files, your TMDb, Radarr
+>    and Emby keys were reachable at `/config/config.json` by anyone who could
+>    load the page. **Rotate all three keys after upgrading.**
 
 ---
 
-## 🤖 RADARR CUSTOM LIST IMPORTING
+## Connecting the services
 
-Since Radarr doesn't support raw CSV upload directly, here is how you can use free integrations to automate your library additions:
+**TMDb** — create a free account and copy the v3 API key from
+*Settings → API*. Required; nothing works without it.
 
-### Option 1: Trakt.tv Custom List (Easiest & Free)
-1. Select your target films in **Slasher Archive** and click **💾 EXPORT CSV**.
-2. Visit [Trakt.tv](https://trakt.tv), create or open a Custom List.
-3. Click the **Import** option and upload the generated CSV file.
-4. In **Radarr**, go to **Settings > Import Lists > + (Add) > Trakt List**.
-5. Log into Trakt, select your custom list, and save!
+**Radarr** — *Settings → General → Security → API Key*. Paste it with your
+server URL, click **Connect to Radarr**, then choose a root folder and quality
+profile and **Save Settings**.
 
-### Option 2: TMDb List Sync
-1. Create a custom list on your [TMDb Profile](https://themoviedb.org).
-2. Select your movies in **Slasher Archive**, click **📜 EXPORT TXT**, and copy the TMDb IDs to add them to your list.
-3. In **Radarr**, add a **TMDb List** inside **Settings > Import Lists > + (Add)** using your TMDb Username and List ID.
+**Emby** — *Dashboard → Advanced → API Keys*. Used read-only, to mark which
+films you already own.
 
 ---
 
-## 🩸 CREATOR LICENSE
+## API
 
-Built for horror cinema enthusiasts. Distributed under the MIT License.
+| Route | Purpose |
+| :--- | :--- |
+| `GET /healthz` | Liveness plus which integrations are configured |
+| `GET /api/config` | Connection status — never returns key values |
+| `POST /api/config` | Save settings; a blank secret leaves the stored one intact |
+| `DELETE /api/config/:key` | Clear one stored secret |
+| `GET /api/tmdb/*` | Cached TMDb proxy, restricted to an endpoint allowlist |
+| `ALL /api/radarr/*` | Radarr v3 proxy, target read from server config only |
+| `ALL /api/emby/*` | Emby proxy, target read from server config only |
+
+---
+
+## Project layout
+
+```text
+server.js          Express server: config store, TMDb/Radarr/Emby proxies
+public/            Everything served to the browser
+  index.html
+  app.js
+  styles.css
+config/            Runtime config.json (gitignored, volume-mounted in Docker)
+```
+
+The split matters: only `public/` is served statically, which is what keeps
+`config.json` unreachable over HTTP.
+
+---
+
+## License
+
+MIT.

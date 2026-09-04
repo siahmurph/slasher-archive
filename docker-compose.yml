@@ -1,11 +1,18 @@
-version: '3.8'
+# Sample stack. The authoritative deployment for this environment lives at
+# C:\docker-compose\environments\o-man-lxc\stacks\scare7\docker-compose.yml
+# and is managed by Dockhand.
 
 services:
   slasher-archive:
-    image: ghcr.io/siahmurph/slasher-archive:latest
+    image: ghcr.io/siahmurph/slasher-archive:2.0.0
     container_name: slasher-archive
     restart: unless-stopped
     ports:
-      - "8383:80"
+      - "8383:8080"
+    environment:
+      - PORT=8080
+      - CONFIG_DIR=/config
     volumes:
-      - /opt/appdata/slasher-archive:/app/config
+      # Holds config.json with your TMDb/Radarr/Emby API keys in plaintext.
+      # Required — without it, settings are lost on every container recreate.
+      - /opt/appdata/slasher-archive:/config

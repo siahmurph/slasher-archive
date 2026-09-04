@@ -1,18 +1,30 @@
-FROM node:18-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
-# Copy dependency manifests
-COPY package.json ./
+# Manifests first so dependency installs stay cached across source edits.
+COPY package.json package-lock.json ./
 
-# Install production dependencies
-RUN npm install --only=production
+# npm ci installs exactly what the lockfile pins — reproducible across rebuilds.
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Copy application files
-COPY server.js index.html styles.css app.js ./
+COPY server.js ./
+COPY public ./public
 
-EXPOSE 80
+# Config lives outside the static root so it can never be served as an asset.
+ENV CONFIG_DIR=/config
+# Port 8080, not 80: the container runs as a non-root user, and binding a
+# privileged port then depends on runtime capability/sysctl defaults.
+ENV PORT=8080
+ENV NODE_ENV=production
 
-ENV PORT=80
+RUN mkdir -p /config && chown -R node:node /config /app
+
+USER node
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD node -e "require('http').get({host:'127.0.0.1',port:process.env.PORT||8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 CMD ["node", "server.js"]
